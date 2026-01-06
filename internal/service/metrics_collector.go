@@ -11,6 +11,7 @@ import (
 
 type Collector interface {
 	Run(poolInterval int, reportInterval int) error
+	UpdateMetrics(metrics map[string]float64) int64
 }
 
 func BuildCollector(url string) Collector {
@@ -32,7 +33,7 @@ func (c CollectorImpl) Run(poolInterval int, reportInterval int) error {
 	ticks := 0
 	for {
 		metrics := getRuntimeMetrics()
-		c.updateCounter = c.updateMetrics(metrics)
+		c.updateCounter = c.UpdateMetrics(metrics)
 		c.lastUpdateMetrics = metrics
 		ticks += poolInterval
 		if ticks%reportInterval == 0 {
@@ -84,7 +85,7 @@ func getRuntimeMetrics() map[string]float64 {
 	return metrics
 }
 
-func (c CollectorImpl) updateMetrics(metrics map[string]float64) int64 {
+func (c CollectorImpl) UpdateMetrics(metrics map[string]float64) int64 {
 	updateCounter := c.updateCounter
 	for k, v := range metrics {
 		if metric, ok := c.lastUpdateMetrics[k]; ok {

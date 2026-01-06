@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strconv"
 
-	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
 
@@ -30,19 +29,21 @@ func (h *UpdateHandlerImpl) UpdateHandler(w http.ResponseWriter, r *http.Request
 	metricValue := r.PathValue("metricValue")
 
 	if metricType == "gauge" {
+		//log.Printf("Received update for gauge: %s - %s", metricName, metricValue)
 		val, err := strconv.ParseFloat(metricValue, 64)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		h.storage.UpdateGauge(metricName, models.Gauge(val))
+		h.storage.UpdateGauge(metricName, &val)
 	} else if metricType == "counter" {
+		//log.Printf("Received update for counter: %s - %s", metricName, metricValue)
 		val, err := strconv.ParseInt(metricValue, 10, 64)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		h.storage.UpdateCounter(metricName, models.Counter(val))
+		h.storage.UpdateCounter(metricName, &val)
 	} else {
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)
 		return
