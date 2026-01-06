@@ -8,9 +8,19 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
 
-var MemStorage = repository.BuildMemStorage()
+type UpdateHandler interface {
+	UpdateHandler(w http.ResponseWriter, r *http.Request)
+}
 
-func UpdateHandler(w http.ResponseWriter, r *http.Request) {
+type UpdateHandlerImpl struct {
+	storage repository.MemStorage
+}
+
+func BuildUpdateHandler(storage repository.MemStorage) UpdateHandler {
+	return &UpdateHandlerImpl{storage: storage}
+}
+
+func (h *UpdateHandlerImpl) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST requests are allowed!", http.StatusMethodNotAllowed)
 		return
@@ -20,34 +30,22 @@ func UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	metricValue := r.PathValue("metricValue")
 
 	if metricType == "gauge" {
-		if err := processGauge(metricName, metricValue); err != nil {
+		val, err := strconv.ParseFloat(metricValue, 64)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		h.storage.UpdateGauge(metricName, models.Gauge(val))
 	} else if metricType == "counter" {
-		if err := processCounter(metricName, metricValue); err != nil {
+		val, err := strconv.ParseInt(metricValue, 10, 64)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		h.storage.UpdateCounter(metricName, models.Counter(val))
 	} else {
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)
 		return
 	}
-}
-
-func processCounter(key string, value string) error {
-	val, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return err
-	}
-	MemStorage.UpdateGauge(key, models.Gauge(val))
-	return nil
-}
-func processGauge(key string, value string) error {
-	val, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return err
-	}
-	MemStorage.UpdateCounter(key, models.Counter(val))
-	return nil
+	http.Error(w, "OK", http.StatusOK)
 }

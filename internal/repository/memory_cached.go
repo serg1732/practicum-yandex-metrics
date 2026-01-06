@@ -7,7 +7,7 @@ type MemStorage interface {
 	UpdateCounter(name string, Data models.Counter)
 }
 
-func BuildMemStorage() MemStorageRepository {
+func BuildMemStorage() MemStorage {
 	return MemStorageRepository{
 		MemStorage: models.MemStorage{
 			CounterMap: make(map[string]models.Counter),
