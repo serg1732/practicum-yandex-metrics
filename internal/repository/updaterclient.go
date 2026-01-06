@@ -32,7 +32,6 @@ func (c UpdaterClient) ExternalUpdateMetrics(updateCounter int64, metrics map[st
 		if errClose != nil {
 			return errClose
 		}
-
 	}
 
 	resp, err := c.httpClient.Post(fmt.Sprintf(c.url, "counter", "PollCount", updateCounter), "Content-Type: text/plain", nil)
