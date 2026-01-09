@@ -15,8 +15,9 @@ func main() {
 	updaterHandler := handler.BuildUpdateHandler(storage)
 	readHandlers := handler.BuildReadHandler(storage)
 	mux := buildRouter(updaterHandler, readHandlers)
-	log.Printf("Starting server on port 8080")
-	err := http.ListenAndServe(":8080", mux)
+	parseFlags()
+	log.Printf("Starting server on address %s", flagRunAddr)
+	err := http.ListenAndServe(flagRunAddr, mux)
 	if err != nil {
 		panic(err)
 	}

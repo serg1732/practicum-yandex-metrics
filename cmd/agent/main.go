@@ -7,8 +7,9 @@ import (
 )
 
 func main() {
-	agent := service.BuildCollector("http://localhost:8080/update/%s/%s/%v")
-	if err := agent.Run(2, 10); err != nil {
+	parseFlags()
+	agent := service.BuildCollector("http://" + remoteAddr)
+	if err := agent.Run(pollInterval, reportInterval); err != nil {
 		log.Fatal(err)
 	}
 }

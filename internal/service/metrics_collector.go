@@ -18,7 +18,7 @@ func BuildCollector(url string) Collector {
 	return CollectorImpl{
 		updateCounter:     0,
 		lastUpdateMetrics: make(map[string]float64),
-		updaterClient:     repository.BuildUpdaterMetric(url),
+		updaterClient:     repository.BuildRestyUpdaterMetric(url),
 	}
 }
 

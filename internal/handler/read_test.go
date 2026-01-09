@@ -1,89 +1,26 @@
-package main
+package handler
 
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/golang/mock/gomock"
-	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
-	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUpdateServerHandler(t *testing.T) {
-	storage := repository.BuildMemStorage()
-	updateHandler := handler.BuildUpdateHandler(storage)
-	readHandlers := handler.BuildReadHandler(storage)
-
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
-	defer srv.Close()
-
-	testData := []struct {
-		name           string
-		method         string
-		url            string
-		expectedStatus int
-	}{
-		{
-			name:           "test 1",
-			method:         "POST",
-			url:            fmt.Sprintf("%s/update/%f/%f/%f", srv.URL, rand.Float64(), rand.Float64(), rand.Float64()),
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name:           "test 2",
-			method:         "POST",
-			url:            fmt.Sprintf("%s/update/%f/%f", srv.URL, rand.Float64(), rand.Float64()),
-			expectedStatus: http.StatusNotFound,
-		},
-		{
-			name:           "test 3",
-			method:         "POST",
-			url:            fmt.Sprintf("%s/update/%s/%s/%f", srv.URL, "gauge", "metricName", rand.Float64()),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:           "test 4",
-			method:         "POST",
-			url:            fmt.Sprintf("%s/update/%s/%s/%d", srv.URL, "counter", "metricName", rand.Int64()),
-			expectedStatus: http.StatusOK,
-		},
-	}
-
-	for _, td := range testData {
-		t.Run(td.name, func(t *testing.T) {
-			req, errBuildRequest := http.NewRequest(td.method, td.url, nil)
-			client := http.Client{}
-			resp, err := client.Do(req)
-			if err != nil {
-				return
-			}
-			defer resp.Body.Close()
-
-			assert.Nil(t, errBuildRequest)
-			assert.Equal(t, td.expectedStatus, resp.StatusCode)
-		})
-	}
-}
-
-func TestAllReadServerHandler(t *testing.T) {
+func TestAllGetHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMemStorage(ctrl)
 
-	updateHandler := handler.BuildUpdateHandler(mockRepo)
-	readHandlers := handler.BuildReadHandler(mockRepo)
-
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
-	defer srv.Close()
-
+	handlerBuilder := BuildReadHandler(mockRepo)
 	testData := []struct {
 		name            string
 		expectedStatus  int
@@ -139,15 +76,16 @@ func TestAllReadServerHandler(t *testing.T) {
 				EXPECT().
 				GetAllGauges().
 				Return(td.expectedGauges)
-			resp, err := http.DefaultClient.Get(srv.URL)
-			if err != nil {
-				assert.Nil(t, err)
-			}
-			defer resp.Body.Close()
-			respBody, _ := io.ReadAll(resp.Body)
 
-			assert.Equal(t, td.expectedStatus, resp.StatusCode)
-			assert.Equal(t, string(getExpectedPage(td.expectedCounter, td.expectedGauges)), string(respBody))
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /", handlerBuilder.AllMetricsHandler)
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", "/", nil)
+			mux.ServeHTTP(rr, req)
+
+			assert.Equal(t, td.expectedStatus, rr.Code)
+			assert.Equal(t, string(getExpectedPage(td.expectedCounter, td.expectedGauges)), rr.Body.String())
+
 		})
 	}
 }
@@ -157,12 +95,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockMemStorage(ctrl)
-
-	updateHandler := handler.BuildUpdateHandler(mockRepo)
-	readHandlers := handler.BuildReadHandler(mockRepo)
-
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
-	defer srv.Close()
+	handlerBuilder := BuildReadHandler(mockRepo)
 
 	testData := []struct {
 		name             string
@@ -195,7 +128,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name:             "test 4",
+			name:             "test 4 success counter",
 			url:              "/value/counter/test4",
 			expectedStatus:   http.StatusOK,
 			repoCounterKey:   "test4",
@@ -203,7 +136,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 			repoCounterExist: true,
 		},
 		{
-			name:            "test 5",
+			name:            "test 5 success gauges",
 			url:             "/value/gauge/test5",
 			expectedStatus:  http.StatusOK,
 			repoGaugesKey:   "test5",
@@ -223,19 +156,18 @@ func TestSelectReadServerHandler(t *testing.T) {
 				GetGauge(gomock.Eq(td.repoGaugesKey)).
 				Return(td.repoGaugesValue, td.repoGaugesExist).AnyTimes()
 
-			resp, err := http.DefaultClient.Get(srv.URL + td.url)
-			if err != nil {
-				assert.Nil(t, err)
-			}
-			defer resp.Body.Close()
-			respBody, _ := io.ReadAll(resp.Body)
+			r := chi.NewRouter()
+			r.HandleFunc("GET /value/{metricType}/{metricName}", handlerBuilder.SelectMetricHandler)
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest("GET", td.url, nil)
+			r.ServeHTTP(rr, req)
 
-			assert.Equal(t, td.expectedStatus, resp.StatusCode)
-			if resp.StatusCode == http.StatusOK {
+			assert.Equal(t, td.expectedStatus, rr.Code)
+			if rr.Code == http.StatusOK {
 				if td.repoCounterExist {
-					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue), string(respBody))
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue), rr.Body.String())
 				} else if td.repoGaugesExist {
-					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue), string(respBody))
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue), rr.Body.String())
 				}
 			}
 		})

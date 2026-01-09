@@ -29,7 +29,7 @@ func TestUpdateHandler(t *testing.T) {
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "test 2",
+			name:           "test 3",
 			req:            httptest.NewRequest("POST", fmt.Sprintf("/update/%s/%s/%v", "counter", "metric", rand.Int63()), nil),
 			expectedStatus: http.StatusOK,
 		},
