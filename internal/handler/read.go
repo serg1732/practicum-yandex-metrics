@@ -50,14 +50,14 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(w http.ResponseWriter, r *h
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		fmt.Fprintf(w, "%s=%v\n", metricName, *val)
+		fmt.Fprintln(w, *val)
 	} else if metricType == models.Gauge {
 		val, isExist := h.storage.GetGauge(metricName)
 		if !isExist {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		fmt.Fprintf(w, "%s=%v\n", metricName, *val)
+		fmt.Fprintln(w, *val)
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 	}

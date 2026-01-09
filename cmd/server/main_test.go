@@ -233,9 +233,9 @@ func TestSelectReadServerHandler(t *testing.T) {
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
 			if resp.StatusCode == http.StatusOK {
 				if td.repoCounterExist {
-					assert.Equal(t, fmt.Sprintf("%s=%v\n", td.repoCounterKey, *td.repoCounterValue), string(respBody))
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue), string(respBody))
 				} else if td.repoGaugesExist {
-					assert.Equal(t, fmt.Sprintf("%s=%v\n", td.repoGaugesKey, *td.repoGaugesValue), string(respBody))
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue), string(respBody))
 				}
 			}
 		})
