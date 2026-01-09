@@ -1,9 +1,9 @@
 package models
 
-//const (
-//	Counter = "counter"
-//	Gauge   = "gauge"
-//)
+const (
+	Counter = "counter"
+	Gauge   = "gauge"
+)
 
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.

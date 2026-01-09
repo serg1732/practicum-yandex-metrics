@@ -7,6 +7,8 @@ type MemStorage interface {
 	GetGauge(name string) (*float64, bool)
 	UpdateCounter(name string, Data *int64)
 	UpdateGauge(name string, Data *float64)
+	GetAllCounters() map[string]*int64
+	GetAllGauges() map[string]*float64
 }
 
 func BuildMemStorage() MemStorage {
@@ -19,6 +21,14 @@ func BuildMemStorage() MemStorage {
 
 type MemStorageRepository struct {
 	MemStorage models.MemStorage
+}
+
+func (m MemStorageRepository) GetAllCounters() map[string]*int64 {
+	return m.MemStorage.CounterMap
+}
+
+func (m MemStorageRepository) GetAllGauges() map[string]*float64 {
+	return m.MemStorage.GaugeMap
 }
 
 func (m MemStorageRepository) GetGauge(name string) (*float64, bool) {
@@ -41,8 +51,7 @@ func (m MemStorageRepository) UpdateCounter(name string, data *int64) {
 			if a == nil || b == nil {
 				return nil
 			}
-			var result int64
-			result = *a + *b
+			result := *a + *b
 			return &result
 		}(counter, data)
 	} else {
