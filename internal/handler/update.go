@@ -49,5 +49,4 @@ func (h *UpdateHandlerImpl) UpdateHandler(w http.ResponseWriter, r *http.Request
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)
 		return
 	}
-	http.Error(w, "OK", http.StatusOK)
 }

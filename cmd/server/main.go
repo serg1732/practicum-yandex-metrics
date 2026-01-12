@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 
@@ -15,9 +16,10 @@ func main() {
 	updaterHandler := handler.BuildUpdateHandler(storage)
 	readHandlers := handler.BuildReadHandler(storage)
 	mux := buildRouter(updaterHandler, readHandlers)
-	parseFlags()
-	log.Printf("Starting server on address %s", flagRunAddr)
-	err := http.ListenAndServe(flagRunAddr, mux)
+	var serverConfig config.ServerConfig
+	parseFlags(&serverConfig)
+	log.Printf("Starting server on address %s", serverConfig.RunAddr)
+	err := http.ListenAndServe(serverConfig.RunAddr, mux)
 	if err != nil {
 		panic(err)
 	}

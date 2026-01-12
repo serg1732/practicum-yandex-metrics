@@ -1,6 +1,10 @@
 package repository
 
-import models "github.com/serg1732/practicum-yandex-metrics/internal/model"
+import (
+	"sync"
+
+	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
+)
 
 type MemStorage interface {
 	GetCounter(name string) (*int64, bool)
@@ -12,7 +16,7 @@ type MemStorage interface {
 }
 
 func BuildMemStorage() MemStorage {
-	return MemStorageRepository{
+	return &MemStorageRepository{
 		MemStorage: models.MemStorage{
 			CounterMap: make(map[string]*int64),
 			GaugeMap:   make(map[string]*float64),
@@ -21,31 +25,36 @@ func BuildMemStorage() MemStorage {
 
 type MemStorageRepository struct {
 	MemStorage models.MemStorage
+	mutex      sync.Mutex
 }
 
-func (m MemStorageRepository) GetAllCounters() map[string]*int64 {
+func (m *MemStorageRepository) GetAllCounters() map[string]*int64 {
 	return m.MemStorage.CounterMap
 }
 
-func (m MemStorageRepository) GetAllGauges() map[string]*float64 {
+func (m *MemStorageRepository) GetAllGauges() map[string]*float64 {
 	return m.MemStorage.GaugeMap
 }
 
-func (m MemStorageRepository) GetGauge(name string) (*float64, bool) {
+func (m *MemStorageRepository) GetGauge(name string) (*float64, bool) {
 	val, isExist := m.MemStorage.GaugeMap[name]
 	return val, isExist
 }
 
-func (m MemStorageRepository) UpdateGauge(name string, Data *float64) {
+func (m *MemStorageRepository) UpdateGauge(name string, Data *float64) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.MemStorage.GaugeMap[name] = Data
 }
 
-func (m MemStorageRepository) GetCounter(name string) (*int64, bool) {
+func (m *MemStorageRepository) GetCounter(name string) (*int64, bool) {
 	counter, isExist := m.MemStorage.CounterMap[name]
 	return counter, isExist
 }
 
-func (m MemStorageRepository) UpdateCounter(name string, data *int64) {
+func (m *MemStorageRepository) UpdateCounter(name string, data *int64) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	if counter, isExist := m.MemStorage.CounterMap[name]; isExist {
 		m.MemStorage.CounterMap[name] = func(a *int64, b *int64) *int64 {
 			if a == nil || b == nil {

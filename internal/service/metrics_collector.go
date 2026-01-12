@@ -4,47 +4,50 @@ import (
 	"log"
 	"math/rand"
 	"runtime"
+	"sync"
 	"time"
 
+	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
 
 type Collector interface {
-	Run(poolInterval int, reportInterval int) error
+	Run(agentConfig config.AgentConfig) error
 	UpdateMetrics(metrics map[string]float64) int64
 }
 
-func BuildCollector(url string) Collector {
-	return CollectorImpl{
+func BuildCollector(agentConfig config.AgentConfig) Collector {
+	return &CollectorImpl{
 		updateCounter:     0,
 		lastUpdateMetrics: make(map[string]float64),
-		updaterClient:     repository.BuildRestyUpdaterMetric(url),
+		updaterClient:     repository.BuildRestyUpdaterMetric("http://" + agentConfig.RemoteAddr),
 	}
 }
 
 type CollectorImpl struct {
 	updateCounter     int64
 	lastUpdateMetrics map[string]float64
-	updaterClient     repository.IUpdaterClient
+	updaterClient     repository.UpdaterClient
+	mutex             sync.Mutex
 }
 
-func (c CollectorImpl) Run(poolInterval int, reportInterval int) error {
+func (c *CollectorImpl) Run(agentConfig config.AgentConfig) error {
 	log.Println("Starting metrics collector")
 	ticks := 0
 	for {
 		metrics := getRuntimeMetrics()
 		c.updateCounter = c.UpdateMetrics(metrics)
 		c.lastUpdateMetrics = metrics
-		ticks += poolInterval
-		if ticks%reportInterval == 0 {
+		ticks += agentConfig.PollInterval
+		if ticks%agentConfig.ReportInterval == 0 {
 			err := c.updaterClient.ExternalUpdateMetrics(c.updateCounter, c.lastUpdateMetrics)
 			if err != nil {
 				return err
 			}
 			c.updateCounter = 0
 		}
-		ticks %= reportInterval
-		time.Sleep(time.Duration(poolInterval) * time.Second)
+		ticks %= agentConfig.ReportInterval
+		time.Sleep(time.Duration(agentConfig.PollInterval) * time.Second)
 	}
 }
 
@@ -85,7 +88,9 @@ func getRuntimeMetrics() map[string]float64 {
 	return metrics
 }
 
-func (c CollectorImpl) UpdateMetrics(metrics map[string]float64) int64 {
+func (c *CollectorImpl) UpdateMetrics(metrics map[string]float64) int64 {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	updateCounter := c.updateCounter
 	for k, v := range metrics {
 		if metric, ok := c.lastUpdateMetrics[k]; ok {

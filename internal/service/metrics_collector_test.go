@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,9 +36,13 @@ func TestUpdateRuntimeMetrics(t *testing.T) {
 		},
 	}
 
+	agentConfig := config.AgentConfig{
+		RemoteAddr: "localhost:8080",
+	}
+
 	for _, test := range testData {
 		t.Run(test.name, func(t *testing.T) {
-			collector := BuildCollector("http://localhost:8080/update/%s/%s/%v")
+			collector := BuildCollector(agentConfig)
 			var counter int64
 			for _, testMap := range test.inputMap {
 				counter += collector.UpdateMetrics(testMap)

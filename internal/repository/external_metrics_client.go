@@ -9,13 +9,8 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-type IUpdaterClient interface {
+type UpdaterClient interface {
 	ExternalUpdateMetrics(updateCounter int64, metrics map[string]float64) error
-}
-
-type UpdaterClient struct {
-	httpClient *http.Client
-	url        string
 }
 
 type RestyUpdaterClient struct {
@@ -23,7 +18,7 @@ type RestyUpdaterClient struct {
 	host       string
 }
 
-func BuildRestyUpdaterMetric(host string) IUpdaterClient {
+func BuildRestyUpdaterMetric(host string) UpdaterClient {
 	return RestyUpdaterClient{httpClient: resty.New(), host: host}
 }
 
