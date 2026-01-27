@@ -10,6 +10,7 @@ import (
 func main() {
 	var agentConfig config.AgentConfig
 	parseFlags(&agentConfig)
+	parseEnvs(&agentConfig)
 	agent := service.BuildCollector(agentConfig)
 	if err := agent.Run(agentConfig); err != nil {
 		log.Fatal(err)

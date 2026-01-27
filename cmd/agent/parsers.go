@@ -2,7 +2,9 @@ package main
 
 import (
 	"flag"
+	"log"
 
+	"github.com/caarlos0/env/v6"
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 )
 
@@ -13,4 +15,12 @@ func parseFlags(agentConfig *config.AgentConfig) {
 	flag.IntVar(&agentConfig.ReportInterval, "r", 10, "interval between reports")
 	flag.IntVar(&agentConfig.PollInterval, "p", 2, "interval between polls")
 	flag.Parse()
+}
+
+// parseEnvs обрабатывает env значения
+func parseEnvs(agentConfig *config.AgentConfig) {
+	err := env.Parse(agentConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

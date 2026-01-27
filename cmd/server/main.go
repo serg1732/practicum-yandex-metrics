@@ -18,6 +18,7 @@ func main() {
 	mux := buildRouter(updaterHandler, readHandlers)
 	var serverConfig config.ServerConfig
 	parseFlags(&serverConfig)
+	parseEnvs(&serverConfig)
 	log.Printf("Starting server on address %s", serverConfig.RunAddr)
 	err := http.ListenAndServe(serverConfig.RunAddr, mux)
 	if err != nil {
