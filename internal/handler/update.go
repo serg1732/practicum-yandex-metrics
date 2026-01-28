@@ -37,6 +37,7 @@ func (h *UpdateHandlerImpl) UpdateHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 		h.storage.UpdateGauge(metricName, &val)
+		w.WriteHeader(http.StatusOK)
 	} else if metricType == models.Counter {
 		//log.Printf("Received update for counter: %s - %s", metricName, metricValue)
 		val, err := strconv.ParseInt(metricValue, 10, 64)
@@ -45,6 +46,7 @@ func (h *UpdateHandlerImpl) UpdateHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 		h.storage.UpdateCounter(metricName, &val)
+		w.WriteHeader(http.StatusOK)
 	} else {
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)
 		return

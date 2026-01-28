@@ -37,6 +37,7 @@ func (h *ReadMetricsHandlerImpl) AllMetricsHandler(w http.ResponseWriter, r *htt
 		fmt.Fprintf(w, "%s=%v\n", k, *v)
 	}
 	fmt.Fprintln(w, "</pre></body></html>")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *ReadMetricsHandlerImpl) SelectMetricHandler(w http.ResponseWriter, r *http.Request) {
@@ -61,5 +62,5 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(w http.ResponseWriter, r *h
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 	}
-
+	w.WriteHeader(http.StatusOK)
 }

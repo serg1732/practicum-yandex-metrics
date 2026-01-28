@@ -6,6 +6,7 @@ import (
 
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
+	"github.com/serg1732/practicum-yandex-metrics/internal/logger"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,7 @@ func main() {
 
 func buildRouter(updateHandlers handler.UpdateHandler, readHandlers handler.ReadMetricsHandler) *chi.Mux {
 	router := chi.NewRouter()
+	router.Use(logger.WithLogger())
 	router.Post("/update/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdateHandler)
 	router.Get("/", readHandlers.AllMetricsHandler)
 	router.Get("/value/{metricType}/{metricName}", readHandlers.SelectMetricHandler)
