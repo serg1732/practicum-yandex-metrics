@@ -34,19 +34,21 @@ type CollectorImpl struct {
 func (c *CollectorImpl) Run(agentConfig config.AgentConfig) error {
 	log.Println("Starting metrics collector")
 	ticks := 0
+	limit := agentConfig.ReportInterval + agentConfig.PollInterval
 	for {
 		metrics := getRuntimeMetrics()
 		c.updateCounter = c.UpdateMetrics(metrics)
 		c.lastUpdateMetrics = metrics
 		ticks += agentConfig.PollInterval
-		if ticks%agentConfig.ReportInterval == 0 {
-			err := c.updaterClient.ExternalUpdateMetrics(c.updateCounter, c.lastUpdateMetrics)
+		if ticks%limit == 0 {
+			err := c.updaterClient.ExternalUpdateJSONMetrics(c.updateCounter, c.lastUpdateMetrics)
 			if err != nil {
-				return err
+				log.Printf("Error updating metrics: %v", err)
+				//return err
 			}
 			c.updateCounter = 0
 		}
-		ticks %= agentConfig.ReportInterval
+		ticks %= limit
 		time.Sleep(time.Duration(agentConfig.PollInterval) * time.Second)
 	}
 }

@@ -38,7 +38,7 @@ func TestUpdateHandler(t *testing.T) {
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
 			mux := http.NewServeMux()
-			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdateHandler)
+			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdatePathValuesHandler)
 			rr := httptest.NewRecorder()
 			mux.ServeHTTP(rr, td.req)
 			assert.Equal(t, td.expectedStatus, rr.Code)

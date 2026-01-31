@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -12,6 +13,7 @@ import (
 type ReadMetricsHandler interface {
 	AllMetricsHandler(w http.ResponseWriter, r *http.Request)
 	SelectMetricHandler(w http.ResponseWriter, r *http.Request)
+	SelectValueMetricHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func BuildReadHandler(storage repository.MemStorage) ReadMetricsHandler {
@@ -63,4 +65,39 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(w http.ResponseWriter, r *h
 		w.WriteHeader(http.StatusNotFound)
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	var metric models.Metrics
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&metric); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	if metric.MType == models.Counter {
+		val, isExist := h.storage.GetCounter(metric.ID)
+		if !isExist {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		metric.Delta = val
+		enc := json.NewEncoder(w)
+		if err := enc.Encode(metric); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	} else if metric.MType == models.Gauge {
+		val, isExist := h.storage.GetGauge(metric.ID)
+		if !isExist {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		metric.Value = val
+		enc := json.NewEncoder(w)
+		if err := enc.Encode(metric); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
 }

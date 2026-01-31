@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -9,7 +10,8 @@ import (
 )
 
 type UpdateHandler interface {
-	UpdateHandler(w http.ResponseWriter, r *http.Request)
+	UpdatePathValuesHandler(w http.ResponseWriter, r *http.Request)
+	UpdateJSONHandler(w http.ResponseWriter, r *http.Request)
 }
 
 type UpdateHandlerImpl struct {
@@ -20,7 +22,7 @@ func BuildUpdateHandler(storage repository.MemStorage) UpdateHandler {
 	return &UpdateHandlerImpl{storage: storage}
 }
 
-func (h *UpdateHandlerImpl) UpdateHandler(w http.ResponseWriter, r *http.Request) {
+func (h *UpdateHandlerImpl) UpdatePathValuesHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST requests are allowed!", http.StatusMethodNotAllowed)
 		return
@@ -46,6 +48,25 @@ func (h *UpdateHandlerImpl) UpdateHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 		h.storage.UpdateCounter(metricName, &val)
+		w.WriteHeader(http.StatusOK)
+	} else {
+		http.Error(w, "Invalid metric type", http.StatusBadRequest)
+		return
+	}
+}
+
+func (h *UpdateHandlerImpl) UpdateJSONHandler(w http.ResponseWriter, r *http.Request) {
+	var metric models.Metrics
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&metric); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
+
+	if metric.MType == models.Gauge {
+		h.storage.UpdateGauge(metric.ID, metric.Value)
+		w.WriteHeader(http.StatusOK)
+	} else if metric.MType == models.Counter {
+		h.storage.UpdateCounter(metric.ID, metric.Delta)
 		w.WriteHeader(http.StatusOK)
 	} else {
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)

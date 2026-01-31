@@ -30,7 +30,9 @@ func main() {
 func buildRouter(updateHandlers handler.UpdateHandler, readHandlers handler.ReadMetricsHandler) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(logger.WithLogger())
-	router.Post("/update/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdateHandler)
+	router.Post("/update/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdatePathValuesHandler)
+	router.Post("/update/", updateHandlers.UpdateJSONHandler)
+	router.Post("/value/", readHandlers.SelectValueMetricHandler)
 	router.Get("/", readHandlers.AllMetricsHandler)
 	router.Get("/value/{metricType}/{metricName}", readHandlers.SelectMetricHandler)
 	return router
