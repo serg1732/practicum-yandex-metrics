@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -52,9 +54,16 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(updateCounter int64, metri
 		if err != nil {
 			return errors.New("error convert to json gauge metrics")
 		}
+
+		gzipMetric, err := gzipBody(jsonMetric)
+		if err != nil {
+			return errors.New("error compress gzip metric")
+		}
+
 		resp, err := r.httpClient.R().
+			SetHeader("Content-Encoding", "gzip").
 			SetHeader("Content-Type", "application/json").
-			SetBody(jsonMetric).
+			SetBody(gzipMetric).
 			Post(urlModified)
 		if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
 			log.Printf("err: error posting gauge metrics: %s, %v, %v, resp: %v", k, v, err, resp)
@@ -67,13 +76,33 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(updateCounter int64, metri
 	if err != nil {
 		return errors.New("error convert to json counter metrics")
 	}
+	gzipMetric, err := gzipBody(jsonMetric)
+	if err != nil {
+		return errors.New("error compress gzip metric")
+	}
 	resp, err := r.httpClient.R().
+		SetHeader("Content-Encoding", "gzip").
 		SetHeader("Content-Type", "application/json").
-		SetBody(jsonMetric).
+		SetBody(gzipMetric).
 		Post(urlModified)
 	if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
 		log.Printf("err: error posting counter metrics: %v, resp: %v", err, resp)
 		return errors.New("error send counter metrics")
 	}
 	return nil
+}
+
+func gzipBody(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+
+	if _, err := gz.Write(data); err != nil {
+		_ = gz.Close()
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
