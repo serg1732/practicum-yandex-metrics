@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/golang/mock/gomock"
+	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository/mocks"
 	"github.com/stretchr/testify/assert"
 )
@@ -24,45 +25,61 @@ func TestAllGetHandler(t *testing.T) {
 	testData := []struct {
 		name            string
 		expectedStatus  int
-		expectedCounter map[string]*int64
-		expectedGauges  map[string]*float64
+		expectedCounter map[string]*models.Metrics
+		expectedGauges  map[string]*models.Metrics
 	}{
 		{"test 1",
 			http.StatusOK,
-			map[string]*int64{
-				"test-counter": getPtr(rand.Int64()),
+			map[string]*models.Metrics{
+				"test-counter": {
+					ID:    "test-counter",
+					MType: "counter",
+					Delta: getPtr(rand.Int64()),
+				},
 			},
-			map[string]*float64{
-				"test-gauge": getPtr(rand.Float64()),
+			map[string]*models.Metrics{
+				"test-gauge": {
+					ID:    "test-gauge",
+					MType: "gauge",
+					Value: getPtr(rand.Float64()),
+				},
 			},
 		},
 		{"test 2",
 			http.StatusOK,
-			map[string]*int64{
-				"test-counter": getPtr(rand.Int64()),
+			map[string]*models.Metrics{
+				"test-counter": {
+					ID:    "test-counter",
+					MType: "counter",
+					Delta: getPtr(rand.Int64()),
+				},
 			},
-			map[string]*float64{},
+			map[string]*models.Metrics{},
 		},
 		{"test 3",
 			http.StatusOK,
-			map[string]*int64{},
-			map[string]*float64{
-				"test-gauge": getPtr(rand.Float64())},
+			map[string]*models.Metrics{},
+			map[string]*models.Metrics{
+				"test-gauge": {
+					ID:    "test-gauge",
+					MType: "gauge",
+					Value: getPtr(rand.Float64()),
+				}},
 		},
 		{"test 4",
 			http.StatusOK,
-			map[string]*int64{},
-			map[string]*float64{},
+			map[string]*models.Metrics{},
+			map[string]*models.Metrics{},
 		},
 		{"test 5",
 			http.StatusOK,
-			map[string]*int64{},
+			map[string]*models.Metrics{},
 			nil,
 		},
 		{"test 6",
 			http.StatusOK,
 			nil,
-			map[string]*float64{},
+			map[string]*models.Metrics{},
 		},
 	}
 
@@ -102,10 +119,10 @@ func TestSelectReadServerHandler(t *testing.T) {
 		url              string
 		expectedStatus   int
 		repoCounterKey   string
-		repoCounterValue *int64
+		repoCounterValue *models.Metrics
 		repoCounterExist bool
 		repoGaugesKey    string
-		repoGaugesValue  *float64
+		repoGaugesValue  *models.Metrics
 		repoGaugesExist  bool
 	}{
 		{
@@ -128,19 +145,27 @@ func TestSelectReadServerHandler(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name:             "test 4 success counter",
-			url:              "/value/counter/test4",
-			expectedStatus:   http.StatusOK,
-			repoCounterKey:   "test4",
-			repoCounterValue: getPtr(rand.Int64()),
+			name:           "test 4 success counter",
+			url:            "/value/counter/test4",
+			expectedStatus: http.StatusOK,
+			repoCounterKey: "test4",
+			repoCounterValue: &models.Metrics{
+				ID:    "test4",
+				MType: "counter",
+				Delta: getPtr(rand.Int64()),
+			},
 			repoCounterExist: true,
 		},
 		{
-			name:            "test 5 success gauges",
-			url:             "/value/gauge/test5",
-			expectedStatus:  http.StatusOK,
-			repoGaugesKey:   "test5",
-			repoGaugesValue: getPtr(rand.Float64()),
+			name:           "test 5 success gauges",
+			url:            "/value/gauge/test5",
+			expectedStatus: http.StatusOK,
+			repoGaugesKey:  "test5",
+			repoGaugesValue: &models.Metrics{
+				ID:    "test5",
+				MType: "gauge",
+				Value: getPtr(rand.Float64()),
+			},
 			repoGaugesExist: true,
 		},
 	}
@@ -165,9 +190,9 @@ func TestSelectReadServerHandler(t *testing.T) {
 			assert.Equal(t, td.expectedStatus, rr.Code)
 			if rr.Code == http.StatusOK {
 				if td.repoCounterExist {
-					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue), rr.Body.String())
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue.Delta), rr.Body.String())
 				} else if td.repoGaugesExist {
-					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue), rr.Body.String())
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue.Value), rr.Body.String())
 				}
 			}
 		})
@@ -178,18 +203,18 @@ func getPtr[T any](v T) *T {
 	return &v
 }
 
-func getExpectedPage(counter map[string]*int64, gauge map[string]*float64) []byte {
+func getExpectedPage(counter map[string]*models.Metrics, gauge map[string]*models.Metrics) []byte {
 	w := new(bytes.Buffer)
 	fmt.Fprintln(w, "<!doctype html><html><body>")
 	fmt.Fprintln(w, "<h3>gauge</h3><pre>")
 	for k, v := range gauge {
-		fmt.Fprintf(w, "%s=%v\n", k, *v)
+		fmt.Fprintf(w, "%s=%v\n", k, *v.Value)
 	}
 	fmt.Fprintln(w, "</pre>")
 
 	fmt.Fprintln(w, "<h3>counter</h3><pre>")
 	for k, v := range counter {
-		fmt.Fprintf(w, "%s=%v\n", k, *v)
+		fmt.Fprintf(w, "%s=%v\n", k, *v.Delta)
 	}
 	fmt.Fprintln(w, "</pre></body></html>")
 	return w.Bytes()

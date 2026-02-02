@@ -1,18 +1,21 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUpdateHandler(t *testing.T) {
-	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage())
+	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(
+		&config.ServerConfig{}, context.Background()))
 	testData := []struct {
 		name           string
 		req            *http.Request

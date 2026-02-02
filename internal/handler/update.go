@@ -38,7 +38,7 @@ func (h *UpdateHandlerImpl) UpdatePathValuesHandler(w http.ResponseWriter, r *ht
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		h.storage.UpdateGauge(metricName, &val)
+		h.storage.Update(metricName, &models.Metrics{ID: metricName, MType: models.Gauge, Value: &val})
 		w.WriteHeader(http.StatusOK)
 	} else if metricType == models.Counter {
 		//log.Printf("Received update for counter: %s - %s", metricName, metricValue)
@@ -47,7 +47,7 @@ func (h *UpdateHandlerImpl) UpdatePathValuesHandler(w http.ResponseWriter, r *ht
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		h.storage.UpdateCounter(metricName, &val)
+		h.storage.Update(metricName, &models.Metrics{ID: metricName, MType: models.Counter, Delta: &val})
 		w.WriteHeader(http.StatusOK)
 	} else {
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)
@@ -63,10 +63,10 @@ func (h *UpdateHandlerImpl) UpdateJSONHandler(w http.ResponseWriter, r *http.Req
 	}
 
 	if metric.MType == models.Gauge {
-		h.storage.UpdateGauge(metric.ID, metric.Value)
+		h.storage.Update(metric.ID, &metric)
 		w.WriteHeader(http.StatusOK)
 	} else if metric.MType == models.Counter {
-		h.storage.UpdateCounter(metric.ID, metric.Delta)
+		h.storage.Update(metric.ID, &metric)
 		w.WriteHeader(http.StatusOK)
 	} else {
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)

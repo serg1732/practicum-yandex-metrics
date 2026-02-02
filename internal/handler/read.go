@@ -30,13 +30,13 @@ func (h *ReadMetricsHandlerImpl) AllMetricsHandler(w http.ResponseWriter, r *htt
 	fmt.Fprintln(w, "<!doctype html><html><body>")
 	fmt.Fprintln(w, "<h3>gauge</h3><pre>")
 	for k, v := range h.storage.GetAllGauges() {
-		fmt.Fprintf(w, "%s=%v\n", k, *v)
+		fmt.Fprintf(w, "%s=%v\n", k, *v.Value)
 	}
 	fmt.Fprintln(w, "</pre>")
 
 	fmt.Fprintln(w, "<h3>counter</h3><pre>")
 	for k, v := range h.storage.GetAllCounters() {
-		fmt.Fprintf(w, "%s=%v\n", k, *v)
+		fmt.Fprintf(w, "%s=%v\n", k, *v.Delta)
 	}
 	fmt.Fprintln(w, "</pre></body></html>")
 	w.WriteHeader(http.StatusOK)
@@ -53,14 +53,14 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(w http.ResponseWriter, r *h
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		fmt.Fprintln(w, *val)
+		fmt.Fprintln(w, *val.Delta)
 	} else if metricType == models.Gauge {
 		val, isExist := h.storage.GetGauge(metricName)
 		if !isExist {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		fmt.Fprintln(w, *val)
+		fmt.Fprintln(w, *val.Value)
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -81,7 +81,7 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(w http.ResponseWriter,
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		metric.Delta = val
+		metric.Delta = val.Delta
 		enc := json.NewEncoder(w)
 		if err := enc.Encode(metric); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -92,7 +92,7 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(w http.ResponseWriter,
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		metric.Value = val
+		metric.Value = val.Value
 		enc := json.NewEncoder(w)
 		if err := enc.Encode(metric); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
