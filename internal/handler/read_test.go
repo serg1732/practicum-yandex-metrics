@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"html/template"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
@@ -95,14 +98,15 @@ func TestAllGetHandler(t *testing.T) {
 				Return(td.expectedGauges)
 
 			mux := http.NewServeMux()
-			mux.HandleFunc("GET /", handlerBuilder.AllMetricsHandler)
+			mux.HandleFunc("GET /", handlerBuilder.AllMetricsHandler(slog.Default()))
 			rr := httptest.NewRecorder()
 			req := httptest.NewRequest("GET", "/", nil)
 			mux.ServeHTTP(rr, req)
 
 			assert.Equal(t, td.expectedStatus, rr.Code)
-			assert.Equal(t, string(getExpectedPage(td.expectedCounter, td.expectedGauges)), rr.Body.String())
-
+			expectedPage, err := getExpectedPage(td.expectedCounter, td.expectedGauges)
+			assert.NoError(t, err)
+			assert.Equal(t, string(expectedPage), rr.Body.String())
 		})
 	}
 }
@@ -182,7 +186,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 				Return(td.repoGaugesValue, td.repoGaugesExist).AnyTimes()
 
 			r := chi.NewRouter()
-			r.HandleFunc("GET /value/{metricType}/{metricName}", handlerBuilder.SelectMetricHandler)
+			r.HandleFunc("GET /value/{metricType}/{metricName}", handlerBuilder.SelectMetricHandler(slog.Default()))
 			rr := httptest.NewRecorder()
 			req := httptest.NewRequest("GET", td.url, nil)
 			r.ServeHTTP(rr, req)
@@ -203,19 +207,25 @@ func getPtr[T any](v T) *T {
 	return &v
 }
 
-func getExpectedPage(counter map[string]*models.Metrics, gauge map[string]*models.Metrics) []byte {
-	w := new(bytes.Buffer)
-	fmt.Fprintln(w, "<!doctype html><html><body>")
-	fmt.Fprintln(w, "<h3>gauge</h3><pre>")
-	for k, v := range gauge {
-		fmt.Fprintf(w, "%s=%v\n", k, *v.Value)
+func getExpectedPage(counter map[string]*models.Metrics, gauge map[string]*models.Metrics) ([]byte, error) {
+	templateHTML, errParseTemplate := template.New("All").Parse(getTemplate())
+	if errParseTemplate != nil {
+		return nil, errParseTemplate
 	}
-	fmt.Fprintln(w, "</pre>")
 
-	fmt.Fprintln(w, "<h3>counter</h3><pre>")
-	for k, v := range counter {
-		fmt.Fprintf(w, "%s=%v\n", k, *v.Delta)
+	data := struct {
+		GaugeMap   map[string]*models.Metrics
+		CounterMap map[string]*models.Metrics
+	}{
+		GaugeMap:   gauge,
+		CounterMap: counter,
 	}
-	fmt.Fprintln(w, "</pre></body></html>")
-	return w.Bytes()
+	var buffer bytes.Buffer
+	wr := bufio.NewWriter(&buffer)
+	err := templateHTML.Execute(wr, data)
+	if err != nil {
+		return nil, err
+	}
+	wr.Flush()
+	return buffer.Bytes(), nil
 }

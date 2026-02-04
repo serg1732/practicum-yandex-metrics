@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
@@ -19,11 +20,11 @@ func TestExternalMetricsClientError(t *testing.T) {
 	client := BuildRestyUpdaterMetric(srv.URL)
 
 	expectedPollCount := rand.Int64()
-	err := client.ExternalUpdateMetrics(expectedPollCount, map[string]float64{
+	err := client.ExternalUpdateMetrics(slog.Default(), expectedPollCount, map[string]float64{
 		"test-gauge": rand.Float64(),
 	})
 	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "error send gauge metrics")
+	assert.Contains(t, err.Error(), "ошибка отправки метрики gauge")
 }
 
 func TestExternalMetricsClientSuccess(t *testing.T) {
@@ -48,6 +49,6 @@ func TestExternalMetricsClientSuccess(t *testing.T) {
 	defer srv.Close()
 
 	client := BuildRestyUpdaterMetric(srv.URL)
-	err := client.ExternalUpdateMetrics(expectedPollCount, expectedGauge)
+	err := client.ExternalUpdateMetrics(slog.Default(), expectedPollCount, expectedGauge)
 	assert.Nil(t, err)
 }

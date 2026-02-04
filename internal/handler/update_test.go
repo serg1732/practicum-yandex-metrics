@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -14,8 +15,8 @@ import (
 )
 
 func TestUpdateHandler(t *testing.T) {
-	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(
-		&config.ServerConfig{}, context.Background()))
+	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(context.Background(),
+		&config.ServerConfig{}))
 	testData := []struct {
 		name           string
 		req            *http.Request
@@ -41,7 +42,7 @@ func TestUpdateHandler(t *testing.T) {
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
 			mux := http.NewServeMux()
-			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdatePathValuesHandler)
+			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdatePathValuesHandler(slog.Default()))
 			rr := httptest.NewRecorder()
 			mux.ServeHTTP(rr, td.req)
 			assert.Equal(t, td.expectedStatus, rr.Code)

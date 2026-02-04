@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-resty/resty/v2"
@@ -14,8 +14,8 @@ import (
 )
 
 type UpdaterClient interface {
-	ExternalUpdateMetrics(updateCounter int64, metrics map[string]float64) error
-	ExternalUpdateJSONMetrics(updateCounter int64, metrics map[string]float64) error
+	ExternalUpdateMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error
+	ExternalUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error
 }
 
 type RestyUpdaterClient struct {
@@ -27,37 +27,43 @@ func BuildRestyUpdaterMetric(host string) UpdaterClient {
 	return RestyUpdaterClient{httpClient: resty.New(), host: host}
 }
 
-func (r RestyUpdaterClient) ExternalUpdateMetrics(updateCounter int64, metrics map[string]float64) error {
+func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error {
 	for k, v := range metrics {
-		urlModified := fmt.Sprintf("%s/update/%s/%s/%v", r.host, "gauge", k, v)
+		urlModified := fmt.Sprintf("%s/update/%s/%s/%v", r.host, models.Gauge, k, v)
 		resp, err := r.httpClient.R().SetHeader("Content-Type", "text/plain").Post(urlModified)
 		if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
-			log.Printf("err: error posting gauge metrics: %s, %v, %v, resp: %v", k, v, err, resp)
-			return errors.New("error send gauge metrics")
+			log.Debug("Ошибка обновления метрик gauge",
+				slog.String("name", k),
+				slog.Float64("value", v),
+				slog.Any("error", err))
+			return errors.New("ошибка отправки метрики gauge")
 		}
 	}
 
 	resp, err := r.httpClient.R().SetHeader("Content-Type", "text/plain").Post(
-		fmt.Sprintf("%s/update/%s/%s/%v", r.host, "counter", "PollCount", updateCounter))
+		fmt.Sprintf("%s/update/%s/%s/%v", r.host, models.Counter, "PollCount", updateCounter))
 	if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
-		log.Printf("err: error posting counter metrics: %v, resp: %v", err, resp)
-		return errors.New("error send counter metrics")
+		log.Debug("Ошибка обновления метрик gauge",
+			slog.String("name", "PollCount"),
+			slog.Int64("value", updateCounter),
+			slog.Any("error", err))
+		return errors.New("ошибка отправки метрики counter")
 	}
 	return nil
 }
 
-func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(updateCounter int64, metrics map[string]float64) error {
+func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error {
 	urlModified := fmt.Sprintf("%s/update/", r.host)
 	for k, v := range metrics {
-		metric := models.Metrics{ID: k, MType: "gauge", Value: &v}
+		metric := models.Metrics{ID: k, MType: models.Gauge, Value: &v}
 		jsonMetric, err := json.Marshal(metric)
 		if err != nil {
-			return errors.New("error convert to json gauge metrics")
+			return errors.New("ошибка конвертации метрики gauge в json")
 		}
 
 		gzipMetric, err := gzipBody(jsonMetric)
 		if err != nil {
-			return errors.New("error compress gzip metric")
+			return errors.New("ошибка сжатия (gzip) метрики")
 		}
 
 		resp, err := r.httpClient.R().
@@ -66,12 +72,15 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(updateCounter int64, metri
 			SetBody(gzipMetric).
 			Post(urlModified)
 		if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
-			log.Printf("err: error posting gauge metrics: %s, %v, %v, resp: %v", k, v, err, resp)
-			return errors.New("error send gauge metrics")
+			log.Debug("Ошибка обновления метрик gauge",
+				slog.String("name", k),
+				slog.Float64("value", v),
+				slog.Any("error", err))
+			return errors.New("ошибка отправки метрики gauge")
 		}
 	}
 
-	metric := models.Metrics{ID: "PollCount", MType: "counter", Delta: &updateCounter}
+	metric := models.Metrics{ID: "PollCount", MType: models.Counter, Delta: &updateCounter}
 	jsonMetric, err := json.Marshal(metric)
 	if err != nil {
 		return errors.New("error convert to json counter metrics")
@@ -86,8 +95,11 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(updateCounter int64, metri
 		SetBody(gzipMetric).
 		Post(urlModified)
 	if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
-		log.Printf("err: error posting counter metrics: %v, resp: %v", err, resp)
-		return errors.New("error send counter metrics")
+		log.Debug("Ошибка обновления метрик gauge",
+			slog.String("name", "PollCount"),
+			slog.Int64("value", updateCounter),
+			slog.Any("error", err))
+		return errors.New("ошибка отправки метрики counter")
 	}
 	return nil
 }

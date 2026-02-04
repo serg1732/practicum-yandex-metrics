@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,20 +20,22 @@ import (
 )
 
 func main() {
-	var serverConfig config.ServerConfig
-	parseFlags(&serverConfig)
-	parseEnvs(&serverConfig)
+	log := logger.NewSlogLogger(slog.LevelInfo)
+	serverConfig, errConfig := config.GetSeverConfig()
+	if errConfig != nil {
+		log.Error("Ошибка парсинга env значений", "error", errConfig)
+	}
 	ctx, stop := signal.NotifyContext(
 		context.Background(),
 		os.Interrupt,
 		syscall.SIGTERM,
 	)
 	defer stop()
-	storage := repository.BuildMemStorage(&serverConfig, ctx)
+	storage := repository.BuildMemStorage(ctx, serverConfig)
 	updaterHandler := handler.BuildUpdateHandler(storage)
 	readHandlers := handler.BuildReadHandler(storage)
-	mux := buildRouter(updaterHandler, readHandlers)
-	log.Printf("Starting server on address %s", serverConfig.RunAddr)
+	mux := buildRouter(log, updaterHandler, readHandlers)
+	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
 	srv := &http.Server{
 		Addr:    serverConfig.RunAddr,
 		Handler: mux,
@@ -41,18 +43,22 @@ func main() {
 
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("server error: %v", err)
+			log.Error("Ошибка в http сервере", "error", err)
+			return
 		}
+		log.Info("Завершение работы http сервера")
 	}()
 
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(serverConfig.StoreInternal)*time.Second)
 	defer cancel()
 
-	_ = srv.Shutdown(shutdownCtx)
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Error("Ошибка при завершении работы http сервера", "error", err)
+	}
 }
 
-func buildRouter(updateHandlers handler.UpdateHandler, readHandlers handler.ReadMetricsHandler) *chi.Mux {
+func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandler, readHandlers handler.ReadMetricsHandler) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,18 +66,18 @@ func buildRouter(updateHandlers handler.UpdateHandler, readHandlers handler.Read
 			next.ServeHTTP(wrapWriter, r)
 		})
 	})
-	router.Use(logger.WithLogger())
-	router.Use(handler.WithGzipCompress())
+	router.Use(logger.WithLogger(log))
+	router.Use(handler.WithGzipCompress(log))
 	router.Route("/update", func(r chi.Router) {
-		r.Post("/", updateHandlers.UpdateJSONHandler)
-		r.Post("/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdatePathValuesHandler)
+		r.Post("/", updateHandlers.UpdateJSONHandler(log))
+		r.Post("/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdatePathValuesHandler(log))
 	})
 
 	router.Route("/value", func(r chi.Router) {
-		r.Post("/", readHandlers.SelectValueMetricHandler)
-		r.Get("/{metricType}/{metricName}", readHandlers.SelectMetricHandler)
+		r.Post("/", readHandlers.SelectValueMetricHandler(log))
+		r.Get("/{metricType}/{metricName}", readHandlers.SelectMetricHandler(log))
 	})
 
-	router.Get("/", readHandlers.AllMetricsHandler)
+	router.Get("/", readHandlers.AllMetricsHandler(log))
 	return router
 }

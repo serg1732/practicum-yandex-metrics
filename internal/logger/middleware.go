@@ -18,8 +18,7 @@ type (
 	}
 )
 
-func WithLogger() func(http.Handler) http.Handler {
-	logger := slog.Default()
+func WithLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		logFn := func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -36,13 +35,13 @@ func WithLogger() func(http.Handler) http.Handler {
 
 			duration := time.Since(start)
 
-			logger.With(
+			log.With(
 				slog.String("URI", r.RequestURI),
 				slog.String("method", r.Method),
 				slog.Duration("duration", duration),
 			).Info("Получен запрос")
 
-			logger.With(
+			log.With(
 				slog.Int("status", responseData.status),
 				slog.Int("size", responseData.size),
 			).Info("Ответ на запрос")

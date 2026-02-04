@@ -22,7 +22,7 @@ type MemStorage interface {
 	GetAllGauges() map[string]*models.Metrics
 }
 
-func BuildMemStorage(serverConfig *config.ServerConfig, ctx context.Context) MemStorage {
+func BuildMemStorage(ctx context.Context, serverConfig *config.ServerConfig) MemStorage {
 	counter := make(map[string]*models.Metrics)
 	gauge := make(map[string]*models.Metrics)
 	if serverConfig.Restore {
@@ -38,28 +38,6 @@ func BuildMemStorage(serverConfig *config.ServerConfig, ctx context.Context) Mem
 		}}
 	repo.runSaver()
 	return repo
-}
-
-func restoreFromFile(pathSave string, gauge map[string]*models.Metrics, counter map[string]*models.Metrics) {
-	data, err := os.ReadFile(pathSave)
-	if err != nil {
-		slog.Error(err.Error())
-		return
-	}
-	var sliceData []models.Metrics
-	err = json.Unmarshal(data, &sliceData)
-	if err != nil {
-		slog.Error(err.Error())
-		return
-	}
-
-	for _, metric := range sliceData {
-		if metric.MType == models.Counter {
-			counter[metric.ID] = &metric
-		} else if metric.MType == models.Gauge {
-			gauge[metric.ID] = &metric
-		}
-	}
 }
 
 type MemStorageRepository struct {
@@ -154,4 +132,26 @@ func (m *MemStorageRepository) Save() {
 		slog.Info(err.Error())
 	}
 	file.Close()
+}
+
+func restoreFromFile(pathSave string, gauge map[string]*models.Metrics, counter map[string]*models.Metrics) {
+	data, err := os.ReadFile(pathSave)
+	if err != nil {
+		slog.Error(err.Error())
+		return
+	}
+	var sliceData []models.Metrics
+	err = json.Unmarshal(data, &sliceData)
+	if err != nil {
+		slog.Error(err.Error())
+		return
+	}
+
+	for _, metric := range sliceData {
+		if metric.MType == models.Counter {
+			counter[metric.ID] = &metric
+		} else if metric.MType == models.Gauge {
+			gauge[metric.ID] = &metric
+		}
+	}
 }

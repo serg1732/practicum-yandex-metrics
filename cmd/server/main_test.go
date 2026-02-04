@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"html/template"
 	"io"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
@@ -20,16 +23,17 @@ import (
 )
 
 func TestUpdateServerHandler(t *testing.T) {
-	storage := repository.BuildMemStorage(&config.ServerConfig{
-		RunAddr:         "127.0.0.1:8080",
-		StoreInternal:   0,
-		FileStoragePath: "storage.json",
-		Restore:         false,
-	}, context.Background())
+	storage := repository.BuildMemStorage(context.Background(),
+		&config.ServerConfig{
+			RunAddr:         "127.0.0.1:8080",
+			StoreInternal:   0,
+			FileStoragePath: "storage.json",
+			Restore:         false,
+		})
 	updateHandler := handler.BuildUpdateHandler(storage)
 	readHandlers := handler.BuildReadHandler(storage)
 
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
+	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
 
 	testData := []struct {
@@ -89,7 +93,7 @@ func TestAllReadServerHandler(t *testing.T) {
 	updateHandler := handler.BuildUpdateHandler(mockRepo)
 	readHandlers := handler.BuildReadHandler(mockRepo)
 
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
+	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
 
 	testData := []struct {
@@ -171,7 +175,9 @@ func TestAllReadServerHandler(t *testing.T) {
 			respBody, _ := io.ReadAll(resp.Body)
 
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
-			assert.Equal(t, string(getExpectedPage(td.expectedCounter, td.expectedGauges)), string(respBody))
+			expectedPage, err := getExpectedPage(td.expectedCounter, td.expectedGauges)
+			assert.NoError(t, err)
+			assert.Equal(t, string(expectedPage), string(respBody))
 		})
 	}
 }
@@ -185,7 +191,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 	updateHandler := handler.BuildUpdateHandler(mockRepo)
 	readHandlers := handler.BuildReadHandler(mockRepo)
 
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
+	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
 
 	testData := []struct {
@@ -278,19 +284,52 @@ func getPtr[T any](v T) *T {
 	return &v
 }
 
-func getExpectedPage(counter map[string]*models.Metrics, gauge map[string]*models.Metrics) []byte {
-	w := new(bytes.Buffer)
-	fmt.Fprintln(w, "<!doctype html><html><body>")
-	fmt.Fprintln(w, "<h3>gauge</h3><pre>")
-	for k, v := range gauge {
-		fmt.Fprintf(w, "%s=%v\n", k, *v.Value)
+func getExpectedPage(counter map[string]*models.Metrics, gauge map[string]*models.Metrics) ([]byte, error) {
+	templateHTML, errParseTemplate := template.New("All").Parse(getTemplate())
+	if errParseTemplate != nil {
+		return nil, errParseTemplate
 	}
-	fmt.Fprintln(w, "</pre>")
 
-	fmt.Fprintln(w, "<h3>counter</h3><pre>")
-	for k, v := range counter {
-		fmt.Fprintf(w, "%s=%v\n", k, *v.Delta)
+	data := struct {
+		GaugeMap   map[string]*models.Metrics
+		CounterMap map[string]*models.Metrics
+	}{
+		GaugeMap:   gauge,
+		CounterMap: counter,
 	}
-	fmt.Fprintln(w, "</pre></body></html>")
-	return w.Bytes()
+	var buffer bytes.Buffer
+	wr := bufio.NewWriter(&buffer)
+	err := templateHTML.Execute(wr, data)
+	if err != nil {
+		return nil, err
+	}
+	wr.Flush()
+	return buffer.Bytes(), nil
+}
+
+func getTemplate() string {
+	return `
+	<!doctype html>
+	<html>
+		<head>
+    	<meta charset="utf-8">
+    	<title>Metrics</title>
+		</head>
+		<body>
+			<h3>gauge</h3>
+				<pre>
+					{{range $k, $v := .GaugeMap}}
+					{{$k}}={{$v.Value}}
+					{{end}}
+				</pre>
+
+			<h3>counter</h3>
+		<pre>
+			{{range $k, $v := .CounterMap}}
+			{{$k}}={{$v.Delta}}
+			{{end}}
+		</pre>
+		</body>
+	</html>
+`
 }

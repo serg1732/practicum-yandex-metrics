@@ -10,12 +10,13 @@ import (
 )
 
 func TestUpdateGauge(t *testing.T) {
-	memStorage := BuildMemStorage(&config.ServerConfig{
-		RunAddr:         "localhost:8080",
-		StoreInternal:   0,
-		FileStoragePath: "storage-gauge.json",
-		Restore:         false,
-	}, context.Background())
+	memStorage := BuildMemStorage(context.Background(),
+		&config.ServerConfig{
+			RunAddr:         "localhost:8080",
+			StoreInternal:   0,
+			FileStoragePath: "storage-gauge.json",
+			Restore:         false,
+		})
 
 	testData := []struct {
 		name          string
@@ -60,12 +61,13 @@ func TestUpdateGauge(t *testing.T) {
 }
 
 func TestUpdateCounter(t *testing.T) {
-	memStorage := BuildMemStorage(&config.ServerConfig{
-		RunAddr:         "localhost:8080",
-		StoreInternal:   10,
-		FileStoragePath: "storage-counter.json",
-		Restore:         false,
-	}, context.Background())
+	memStorage := BuildMemStorage(context.Background(),
+		&config.ServerConfig{
+			RunAddr:         "localhost:8080",
+			StoreInternal:   10,
+			FileStoragePath: "storage-counter.json",
+			Restore:         false,
+		})
 
 	testData := []struct {
 		name          string
