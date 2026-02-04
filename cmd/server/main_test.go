@@ -16,14 +16,14 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
+	"github.com/serg1732/practicum-yandex-metrics/internal/handler/mocks"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
-	"github.com/serg1732/practicum-yandex-metrics/internal/repository/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUpdateServerHandler(t *testing.T) {
-	storage := repository.BuildMemStorage(context.Background(),
+	storage := repository.BuildMemStorage(context.Background(), slog.Default(),
 		&config.ServerConfig{
 			RunAddr:         "127.0.0.1:8080",
 			StoreInternal:   0,
@@ -88,10 +88,11 @@ func TestAllReadServerHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := mocks.NewMockMemStorage(ctrl)
+	mockReadRepo := mocks.NewMockReadStorage(ctrl)
+	mockUpdateRepo := mocks.NewMockUpdateStorage(ctrl)
 
-	updateHandler := handler.BuildUpdateHandler(mockRepo)
-	readHandlers := handler.BuildReadHandler(mockRepo)
+	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo)
+	readHandlers := handler.BuildReadHandler(mockReadRepo)
 
 	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
@@ -159,11 +160,11 @@ func TestAllReadServerHandler(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetAllCounters().
 				Return(td.expectedCounter)
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetAllGauges().
 				Return(td.expectedGauges)
@@ -186,10 +187,11 @@ func TestSelectReadServerHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := mocks.NewMockMemStorage(ctrl)
+	mockReadRepo := mocks.NewMockReadStorage(ctrl)
+	mockUpdateRepo := mocks.NewMockUpdateStorage(ctrl)
 
-	updateHandler := handler.BuildUpdateHandler(mockRepo)
-	readHandlers := handler.BuildReadHandler(mockRepo)
+	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo)
+	readHandlers := handler.BuildReadHandler(mockReadRepo)
 
 	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
@@ -252,11 +254,11 @@ func TestSelectReadServerHandler(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetCounter(gomock.Eq(td.repoCounterKey)).
 				Return(td.repoCounterValue, td.repoCounterExist).AnyTimes()
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetGauge(gomock.Eq(td.repoGaugesKey)).
 				Return(td.repoGaugesValue, td.repoGaugesExist).AnyTimes()

@@ -1,3 +1,4 @@
+//go:generate mockgen -source=read.go -destination=mocks/mock_read.go -package=mocks
 package handler
 
 import (
@@ -9,21 +10,21 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
-	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
 
-type ReadMetricsHandler interface {
-	AllMetricsHandler(log *slog.Logger) http.HandlerFunc
-	SelectMetricHandler(log *slog.Logger) http.HandlerFunc
-	SelectValueMetricHandler(log *slog.Logger) http.HandlerFunc
+type ReadStorage interface {
+	GetCounter(name string) (*models.Metrics, bool)
+	GetGauge(name string) (*models.Metrics, bool)
+	GetAllCounters() map[string]*models.Metrics
+	GetAllGauges() map[string]*models.Metrics
 }
 
-func BuildReadHandler(storage repository.MemStorage) ReadMetricsHandler {
-	return &ReadMetricsHandlerImpl{storage: storage}
+func BuildReadHandler(storage ReadStorage) ReadMetricsHandlerImpl {
+	return ReadMetricsHandlerImpl{storage: storage}
 }
 
 type ReadMetricsHandlerImpl struct {
-	storage      repository.MemStorage
+	storage      ReadStorage
 	templateHTML *template.Template
 }
 
@@ -77,6 +78,7 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(log *slog.Logger) http.Hand
 			}
 			fmt.Fprintln(w, *val.Value)
 		} else {
+			log.Error("Неизвестный тип метрики", "name", metricName, "type", metricType)
 			w.WriteHeader(http.StatusNotFound)
 		}
 		log.Info("Метрика найдена", "name", metricName, "type", metricType)
@@ -90,7 +92,7 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 		var metric models.Metrics
 		dec := json.NewDecoder(r.Body)
 		if err := dec.Decode(&metric); err != nil {
-			log.Error("Ошибка конвертации JSON из тела запроса")
+			log.Error("Ошибка конвертации JSON из тела запроса", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
@@ -104,7 +106,8 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 			metric.Delta = val.Delta
 			enc := json.NewEncoder(w)
 			if err := enc.Encode(metric); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				log.Error("Ошибка при конвертации в JSON данных для отправки", "error", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		} else if metric.MType == models.Gauge {
 			val, isExist := h.storage.GetGauge(metric.ID)
@@ -116,7 +119,7 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 			metric.Value = val.Value
 			enc := json.NewEncoder(w)
 			if err := enc.Encode(metric); err != nil {
-				log.Error("Ошибка при конвертации в JSON данных для отправки")
+				log.Error("Ошибка при конвертации в JSON данных для отправки", "error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		} else {

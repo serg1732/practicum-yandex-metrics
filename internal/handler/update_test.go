@@ -15,7 +15,7 @@ import (
 )
 
 func TestUpdateHandler(t *testing.T) {
-	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(context.Background(),
+	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(context.Background(), slog.Default(),
 		&config.ServerConfig{}))
 	testData := []struct {
 		name           string

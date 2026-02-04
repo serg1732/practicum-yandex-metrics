@@ -31,7 +31,7 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
-	storage := repository.BuildMemStorage(ctx, serverConfig)
+	storage := repository.BuildMemStorage(ctx, log, serverConfig)
 	updaterHandler := handler.BuildUpdateHandler(storage)
 	readHandlers := handler.BuildReadHandler(storage)
 	mux := buildRouter(log, updaterHandler, readHandlers)
@@ -58,7 +58,7 @@ func main() {
 	}
 }
 
-func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandler, readHandlers handler.ReadMetricsHandler) *chi.Mux {
+func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandlerImpl, readHandlers handler.ReadMetricsHandlerImpl) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

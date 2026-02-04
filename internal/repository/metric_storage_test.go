@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestUpdateGauge(t *testing.T) {
-	memStorage := BuildMemStorage(context.Background(),
+	memStorage := BuildMemStorage(context.Background(), slog.Default(),
 		&config.ServerConfig{
 			RunAddr:         "localhost:8080",
 			StoreInternal:   0,
@@ -51,7 +52,7 @@ func TestUpdateGauge(t *testing.T) {
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			memStorage.Update(data.name, data.gauge)
+			memStorage.Update(slog.Default(), data.name, data.gauge)
 			val, isExist := memStorage.GetGauge(data.name)
 
 			assert.Equal(t, data.expectedExist, isExist)
@@ -61,7 +62,7 @@ func TestUpdateGauge(t *testing.T) {
 }
 
 func TestUpdateCounter(t *testing.T) {
-	memStorage := BuildMemStorage(context.Background(),
+	memStorage := BuildMemStorage(context.Background(), slog.Default(),
 		&config.ServerConfig{
 			RunAddr:         "localhost:8080",
 			StoreInternal:   10,
@@ -102,7 +103,7 @@ func TestUpdateCounter(t *testing.T) {
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			memStorage.Update(data.name, data.counter)
+			memStorage.Update(slog.Default(), data.name, data.counter)
 			val, isExist := memStorage.GetCounter(data.name)
 
 			assert.Equal(t, data.expectedExist, isExist)

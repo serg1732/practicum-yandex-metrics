@@ -13,20 +13,11 @@ import (
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
 
-//go:generate mockgen -source=metric_storage.go -destination=mocks/mock_metric_storage.go -package=mocks
-type MemStorage interface {
-	GetCounter(name string) (*models.Metrics, bool)
-	GetGauge(name string) (*models.Metrics, bool)
-	Update(name string, Data *models.Metrics)
-	GetAllCounters() map[string]*models.Metrics
-	GetAllGauges() map[string]*models.Metrics
-}
-
-func BuildMemStorage(ctx context.Context, serverConfig *config.ServerConfig) MemStorage {
+func BuildMemStorage(ctx context.Context, log *slog.Logger, serverConfig *config.ServerConfig) *MemStorageRepository {
 	counter := make(map[string]*models.Metrics)
 	gauge := make(map[string]*models.Metrics)
 	if serverConfig.Restore {
-		slog.Info("Загрузка данных из файла (выставлен флаг)")
+		log.Info("Загрузка данных из файла (выставлен флаг)")
 		restoreFromFile(serverConfig.FileStoragePath, gauge, counter)
 	}
 	repo := &MemStorageRepository{
@@ -36,7 +27,7 @@ func BuildMemStorage(ctx context.Context, serverConfig *config.ServerConfig) Mem
 			CounterMap: counter,
 			GaugeMap:   gauge,
 		}}
-	repo.runSaver()
+	repo.runSaver(log)
 	return repo
 }
 
@@ -48,9 +39,9 @@ type MemStorageRepository struct {
 	mutex      sync.Mutex
 }
 
-func (m *MemStorageRepository) runSaver() {
+func (m *MemStorageRepository) runSaver(log *slog.Logger) {
 	if m.Config.StoreInternal == 0 {
-		slog.Info("Задано значение 0 между обновлениями")
+		log.Info("Задано значение 0 между обновлениями")
 		return
 	}
 	go func() {
@@ -58,7 +49,7 @@ func (m *MemStorageRepository) runSaver() {
 		for {
 			select {
 			case <-m.ctx.Done():
-				slog.Debug("Завершение работы обновления")
+				log.Debug("Завершение работы обновления")
 				return
 			default:
 				time.Sleep(time.Second)
@@ -67,9 +58,9 @@ func (m *MemStorageRepository) runSaver() {
 					tick = (tick + 1) % m.Config.StoreInternal
 					continue
 				}
-				slog.Debug(fmt.Sprintf("Обновление файла с хранилищем %d", tick))
+				log.Debug(fmt.Sprintf("Обновление файла с хранилищем %d", tick))
 				m.mutex.Lock()
-				m.Save()
+				m.Save(log)
 				m.mutex.Unlock()
 			}
 			tick++
@@ -90,7 +81,7 @@ func (m *MemStorageRepository) GetGauge(name string) (*models.Metrics, bool) {
 	return val, isExist
 }
 
-func (m *MemStorageRepository) Update(name string, Data *models.Metrics) {
+func (m *MemStorageRepository) Update(log *slog.Logger, name string, Data *models.Metrics) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if Data.MType == models.Gauge {
@@ -109,7 +100,7 @@ func (m *MemStorageRepository) Update(name string, Data *models.Metrics) {
 		}
 	}
 	if m.Config.StoreInternal == 0 {
-		m.Save()
+		m.Save(log)
 	}
 }
 
@@ -117,7 +108,7 @@ func (m *MemStorageRepository) GetCounter(name string) (*models.Metrics, bool) {
 	counter, isExist := m.MemStorage.CounterMap[name]
 	return counter, isExist
 }
-func (m *MemStorageRepository) Save() {
+func (m *MemStorageRepository) Save(log *slog.Logger) {
 	file, _ := os.Create(m.Config.FileStoragePath)
 	sliceSave := make([]models.Metrics, 0)
 

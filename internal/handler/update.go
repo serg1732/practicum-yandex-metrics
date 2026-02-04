@@ -7,26 +7,24 @@ import (
 	"strconv"
 
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
-	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
 
-type UpdateHandler interface {
-	UpdatePathValuesHandler(log *slog.Logger) http.HandlerFunc
-	UpdateJSONHandler(log *slog.Logger) http.HandlerFunc
+type UpdateStorage interface {
+	Update(log *slog.Logger, name string, Data *models.Metrics)
 }
 
 type UpdateHandlerImpl struct {
-	storage repository.MemStorage
+	storage UpdateStorage
 }
 
-func BuildUpdateHandler(storage repository.MemStorage) UpdateHandler {
-	return &UpdateHandlerImpl{storage: storage}
+func BuildUpdateHandler(storage UpdateStorage) UpdateHandlerImpl {
+	return UpdateHandlerImpl{storage: storage}
 }
 
 func (h *UpdateHandlerImpl) UpdatePathValuesHandler(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			log.Info("Некорректный метод в запросе", "method", r.Method)
+			log.Error("Некорректный метод в запросе", "method", r.Method)
 			http.Error(w, "Only POST requests are allowed!", http.StatusMethodNotAllowed)
 			return
 		}
@@ -37,20 +35,20 @@ func (h *UpdateHandlerImpl) UpdatePathValuesHandler(log *slog.Logger) http.Handl
 		if metricType == models.Gauge {
 			val, err := strconv.ParseFloat(metricValue, 64)
 			if err != nil {
-				log.Error("Ошибка при конвертации значения метрики", "error", err.Error())
+				log.Error("Ошибка при конвертации значения метрики", "error", err)
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			h.storage.Update(metricName, &models.Metrics{ID: metricName, MType: models.Gauge, Value: &val})
+			h.storage.Update(log, metricName, &models.Metrics{ID: metricName, MType: models.Gauge, Value: &val})
 			w.WriteHeader(http.StatusOK)
 		} else if metricType == models.Counter {
 			val, err := strconv.ParseInt(metricValue, 10, 64)
 			if err != nil {
-				log.Error("Ошибка при конвертации значения метрики", "error", err.Error())
+				log.Error("Ошибка при конвертации значения метрики", "error", err)
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			h.storage.Update(metricName, &models.Metrics{ID: metricName, MType: models.Counter, Delta: &val})
+			h.storage.Update(log, metricName, &models.Metrics{ID: metricName, MType: models.Counter, Delta: &val})
 			w.WriteHeader(http.StatusOK)
 		} else {
 			log.Error("Неизвестный тип метрики из запроса", "type", metricType)
@@ -70,11 +68,11 @@ func (h *UpdateHandlerImpl) UpdateJSONHandler(log *slog.Logger) http.HandlerFunc
 		}
 
 		if metric.MType == models.Gauge {
-			h.storage.Update(metric.ID, &metric)
+			h.storage.Update(log, metric.ID, &metric)
 			log.Debug("Успешное обновление метрики", "name", metric.ID, "type", metric.MType)
 			w.WriteHeader(http.StatusOK)
 		} else if metric.MType == models.Counter {
-			h.storage.Update(metric.ID, &metric)
+			h.storage.Update(log, metric.ID, &metric)
 			log.Debug("Успешное обновление метрики", "name", metric.ID, "type", metric.MType)
 			w.WriteHeader(http.StatusOK)
 		} else {

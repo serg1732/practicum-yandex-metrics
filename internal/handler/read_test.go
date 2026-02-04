@@ -13,8 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/golang/mock/gomock"
+	"github.com/serg1732/practicum-yandex-metrics/internal/handler/mocks"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
-	"github.com/serg1732/practicum-yandex-metrics/internal/repository/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -22,7 +22,7 @@ func TestAllGetHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := mocks.NewMockMemStorage(ctrl)
+	mockRepo := mocks.NewMockReadStorage(ctrl)
 
 	handlerBuilder := BuildReadHandler(mockRepo)
 	testData := []struct {
@@ -115,7 +115,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := mocks.NewMockMemStorage(ctrl)
+	mockRepo := mocks.NewMockReadStorage(ctrl)
 	handlerBuilder := BuildReadHandler(mockRepo)
 
 	testData := []struct {
