@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
+	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
 
 type ReadStorage interface {
@@ -125,6 +126,15 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
+	}
+}
+
+func (h *ReadMetricsHandlerImpl) PingDatabase(log *slog.Logger, db *repository.DataBase) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if db.Ping() != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 

@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-resty/resty/v2 v2.17.1
 	github.com/golang/mock v1.6.0
+	github.com/lib/pq v1.11.2
 	github.com/stretchr/testify v1.11.1
 )
 

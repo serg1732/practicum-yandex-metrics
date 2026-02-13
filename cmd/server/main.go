@@ -34,7 +34,11 @@ func main() {
 	storage := repository.BuildMemStorage(ctx, log, serverConfig)
 	updaterHandler := handler.BuildUpdateHandler(storage)
 	readHandlers := handler.BuildReadHandler(storage)
-	mux := buildRouter(log, updaterHandler, readHandlers)
+	db, err := repository.BuildDataBase(serverConfig.DSN)
+	if err != nil {
+		log.Error("Ошибка подключения к БД", "error", err)
+	}
+	mux := buildRouter(log, db, updaterHandler, readHandlers)
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
 	srv := &http.Server{
 		Addr:    serverConfig.RunAddr,
@@ -58,7 +62,7 @@ func main() {
 	}
 }
 
-func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandlerImpl, readHandlers handler.ReadMetricsHandlerImpl) *chi.Mux {
+func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handler.UpdateHandlerImpl, readHandlers handler.ReadMetricsHandlerImpl) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,7 +81,7 @@ func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandlerImpl, rea
 		r.Post("/", readHandlers.SelectValueMetricHandler(log))
 		r.Get("/{metricType}/{metricName}", readHandlers.SelectMetricHandler(log))
 	})
-
+	router.Get("/ping", readHandlers.PingDatabase(log, db))
 	router.Get("/", readHandlers.AllMetricsHandler(log))
 	return router
 }
