@@ -18,7 +18,7 @@ func BuildMemStorage(ctx context.Context, log *slog.Logger, serverConfig *config
 	gauge := make(map[string]*models.Metrics)
 	if serverConfig.Restore {
 		log.Info("Загрузка данных из файла (выставлен флаг)")
-		restoreFromFile(serverConfig.FileStoragePath, gauge, counter)
+		restoreFromFile(log, serverConfig.FileStoragePath, gauge, counter)
 	}
 	repo := &MemStorageRepository{
 		Config: serverConfig,
@@ -54,7 +54,7 @@ func (m *MemStorageRepository) runSaver(log *slog.Logger) {
 			default:
 				time.Sleep(time.Second)
 				if tick%m.Config.StoreInternal != 0 {
-					slog.Debug(fmt.Sprintf("Ticks %d", tick))
+					log.Debug(fmt.Sprintf("Ticks %d", tick))
 					tick = (tick + 1) % m.Config.StoreInternal
 					continue
 				}
@@ -120,21 +120,21 @@ func (m *MemStorageRepository) Save(log *slog.Logger) {
 	}
 	err := json.NewEncoder(file).Encode(sliceSave)
 	if err != nil {
-		slog.Info(err.Error())
+		log.Error("Ошибка при инициализации записи json в файл:", "error", err.Error())
 	}
 	file.Close()
 }
 
-func restoreFromFile(pathSave string, gauge map[string]*models.Metrics, counter map[string]*models.Metrics) {
+func restoreFromFile(log *slog.Logger, pathSave string, gauge map[string]*models.Metrics, counter map[string]*models.Metrics) {
 	data, err := os.ReadFile(pathSave)
 	if err != nil {
-		slog.Error(err.Error())
+		log.Error("Ошибка при чтении файла хранилища", "error", err.Error())
 		return
 	}
 	var sliceData []models.Metrics
 	err = json.Unmarshal(data, &sliceData)
 	if err != nil {
-		slog.Error(err.Error())
+		log.Error("Ошибка при обработке файла хранилища", "error", err.Error())
 		return
 	}
 

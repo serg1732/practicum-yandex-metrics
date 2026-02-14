@@ -84,6 +84,31 @@ func TestUpdateServerHandler(t *testing.T) {
 	}
 }
 
+const templateMetricsPage string = `
+	<!doctype html>
+	<html>
+		<head>
+    	<meta charset="utf-8">
+    	<title>Metrics</title>
+		</head>
+		<body>
+			<h3>gauge</h3>
+				<pre>
+					{{range $k, $v := .GaugeMap}}
+					{{$k}}={{$v.Value}}
+					{{end}}
+				</pre>
+
+			<h3>counter</h3>
+		<pre>
+			{{range $k, $v := .CounterMap}}
+			{{$k}}={{$v.Delta}}
+			{{end}}
+		</pre>
+		</body>
+	</html>
+`
+
 func TestAllReadServerHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -93,6 +118,11 @@ func TestAllReadServerHandler(t *testing.T) {
 
 	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo)
 	readHandlers := handler.BuildReadHandler(mockReadRepo)
+
+	templateHTML, errParseTemplate := template.New("All").Parse(templateMetricsPage)
+	if errParseTemplate != nil {
+		assert.NoError(t, errParseTemplate)
+	}
 
 	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
@@ -176,7 +206,7 @@ func TestAllReadServerHandler(t *testing.T) {
 			respBody, _ := io.ReadAll(resp.Body)
 
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
-			expectedPage, err := getExpectedPage(td.expectedCounter, td.expectedGauges)
+			expectedPage, err := getExpectedPage(t, templateHTML, td.expectedCounter, td.expectedGauges)
 			assert.NoError(t, err)
 			assert.Equal(t, string(expectedPage), string(respBody))
 		})
@@ -286,11 +316,8 @@ func getPtr[T any](v T) *T {
 	return &v
 }
 
-func getExpectedPage(counter map[string]*models.Metrics, gauge map[string]*models.Metrics) ([]byte, error) {
-	templateHTML, errParseTemplate := template.New("All").Parse(getTemplate())
-	if errParseTemplate != nil {
-		return nil, errParseTemplate
-	}
+func getExpectedPage(t *testing.T, templateHTML *template.Template, counter map[string]*models.Metrics, gauge map[string]*models.Metrics) ([]byte, error) {
+	t.Helper()
 
 	data := struct {
 		GaugeMap   map[string]*models.Metrics
@@ -307,31 +334,4 @@ func getExpectedPage(counter map[string]*models.Metrics, gauge map[string]*model
 	}
 	wr.Flush()
 	return buffer.Bytes(), nil
-}
-
-func getTemplate() string {
-	return `
-	<!doctype html>
-	<html>
-		<head>
-    	<meta charset="utf-8">
-    	<title>Metrics</title>
-		</head>
-		<body>
-			<h3>gauge</h3>
-				<pre>
-					{{range $k, $v := .GaugeMap}}
-					{{$k}}={{$v.Value}}
-					{{end}}
-				</pre>
-
-			<h3>counter</h3>
-		<pre>
-			{{range $k, $v := .CounterMap}}
-			{{$k}}={{$v.Delta}}
-			{{end}}
-		</pre>
-		</body>
-	</html>
-`
 }
