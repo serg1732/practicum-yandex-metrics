@@ -1,27 +1,39 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"fmt"
+	"html/template"
 	"io"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
+	"github.com/serg1732/practicum-yandex-metrics/internal/handler/mocks"
+	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
-	"github.com/serg1732/practicum-yandex-metrics/internal/repository/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUpdateServerHandler(t *testing.T) {
-	storage := repository.BuildMemStorage()
+	storage := repository.BuildMemStorage(context.Background(), slog.Default(),
+		&config.ServerConfig{
+			RunAddr:         "127.0.0.1:8080",
+			StoreInternal:   0,
+			FileStoragePath: "storage.json",
+			Restore:         false,
+		})
 	updateHandler := handler.BuildUpdateHandler(storage)
 	readHandlers := handler.BuildReadHandler(storage)
 
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
+	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
 
 	testData := []struct {
@@ -72,70 +84,117 @@ func TestUpdateServerHandler(t *testing.T) {
 	}
 }
 
+const templateMetricsPage string = `
+	<!doctype html>
+	<html>
+		<head>
+    	<meta charset="utf-8">
+    	<title>Metrics</title>
+		</head>
+		<body>
+			<h3>gauge</h3>
+				<pre>
+					{{range $k, $v := .GaugeMap}}
+					{{$k}}={{$v.Value}}
+					{{end}}
+				</pre>
+
+			<h3>counter</h3>
+		<pre>
+			{{range $k, $v := .CounterMap}}
+			{{$k}}={{$v.Delta}}
+			{{end}}
+		</pre>
+		</body>
+	</html>
+`
+
 func TestAllReadServerHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := mocks.NewMockMemStorage(ctrl)
+	mockReadRepo := mocks.NewMockReadStorage(ctrl)
+	mockUpdateRepo := mocks.NewMockUpdateStorage(ctrl)
 
-	updateHandler := handler.BuildUpdateHandler(mockRepo)
-	readHandlers := handler.BuildReadHandler(mockRepo)
+	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo)
+	readHandlers := handler.BuildReadHandler(mockReadRepo)
 
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
+	templateHTML, errParseTemplate := template.New("All").Parse(templateMetricsPage)
+	if errParseTemplate != nil {
+		assert.NoError(t, errParseTemplate)
+	}
+
+	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
 
 	testData := []struct {
 		name            string
 		expectedStatus  int
-		expectedCounter map[string]*int64
-		expectedGauges  map[string]*float64
+		expectedCounter map[string]*models.Metrics
+		expectedGauges  map[string]*models.Metrics
 	}{
 		{"test 1",
 			http.StatusOK,
-			map[string]*int64{
-				"test-counter": getPtr(rand.Int64()),
+			map[string]*models.Metrics{
+				"test-counter": {
+					ID:    "test-counter",
+					MType: models.Counter,
+					Delta: getPtr(rand.Int64()),
+				},
 			},
-			map[string]*float64{
-				"test-gauge": getPtr(rand.Float64()),
+			map[string]*models.Metrics{
+				"test-gauge": {
+					ID:    "test-gauge",
+					MType: models.Gauge,
+					Value: getPtr(rand.Float64()),
+				},
 			},
 		},
 		{"test 2",
 			http.StatusOK,
-			map[string]*int64{
-				"test-counter": getPtr(rand.Int64()),
+			map[string]*models.Metrics{
+				"test-counter": {
+					ID:    "test-counter",
+					MType: models.Counter,
+					Delta: getPtr(rand.Int64()),
+				},
 			},
-			map[string]*float64{},
+			map[string]*models.Metrics{},
 		},
 		{"test 3",
 			http.StatusOK,
-			map[string]*int64{},
-			map[string]*float64{
-				"test-gauge": getPtr(rand.Float64())},
+			map[string]*models.Metrics{},
+			map[string]*models.Metrics{
+				"test-gauge": {
+					ID:    "test-gauge",
+					MType: models.Gauge,
+					Value: getPtr(rand.Float64()),
+				}},
 		},
 		{"test 4",
 			http.StatusOK,
-			map[string]*int64{},
-			map[string]*float64{},
+			map[string]*models.Metrics{},
+			map[string]*models.Metrics{},
 		},
 		{"test 5",
 			http.StatusOK,
-			map[string]*int64{},
+			map[string]*models.Metrics{},
 			nil,
 		},
 		{"test 6",
 			http.StatusOK,
 			nil,
-			map[string]*float64{},
+			map[string]*models.Metrics{},
 		},
 	}
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetAllCounters().
 				Return(td.expectedCounter)
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetAllGauges().
 				Return(td.expectedGauges)
@@ -147,7 +206,9 @@ func TestAllReadServerHandler(t *testing.T) {
 			respBody, _ := io.ReadAll(resp.Body)
 
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
-			assert.Equal(t, string(getExpectedPage(td.expectedCounter, td.expectedGauges)), string(respBody))
+			expectedPage, err := getExpectedPage(t, templateHTML, td.expectedCounter, td.expectedGauges)
+			assert.NoError(t, err)
+			assert.Equal(t, string(expectedPage), string(respBody))
 		})
 	}
 }
@@ -156,12 +217,13 @@ func TestSelectReadServerHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := mocks.NewMockMemStorage(ctrl)
+	mockReadRepo := mocks.NewMockReadStorage(ctrl)
+	mockUpdateRepo := mocks.NewMockUpdateStorage(ctrl)
 
-	updateHandler := handler.BuildUpdateHandler(mockRepo)
-	readHandlers := handler.BuildReadHandler(mockRepo)
+	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo)
+	readHandlers := handler.BuildReadHandler(mockReadRepo)
 
-	srv := httptest.NewServer(buildRouter(updateHandler, readHandlers))
+	srv := httptest.NewServer(buildRouter(slog.Default(), updateHandler, readHandlers))
 	defer srv.Close()
 
 	testData := []struct {
@@ -169,10 +231,10 @@ func TestSelectReadServerHandler(t *testing.T) {
 		url              string
 		expectedStatus   int
 		repoCounterKey   string
-		repoCounterValue *int64
+		repoCounterValue *models.Metrics
 		repoCounterExist bool
 		repoGaugesKey    string
-		repoGaugesValue  *float64
+		repoGaugesValue  *models.Metrics
 		repoGaugesExist  bool
 	}{
 		{
@@ -195,30 +257,38 @@ func TestSelectReadServerHandler(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name:             "test 4",
-			url:              "/value/counter/test4",
-			expectedStatus:   http.StatusOK,
-			repoCounterKey:   "test4",
-			repoCounterValue: getPtr(rand.Int64()),
+			name:           "test 4",
+			url:            "/value/counter/test4",
+			expectedStatus: http.StatusOK,
+			repoCounterKey: "test4",
+			repoCounterValue: &models.Metrics{
+				ID:    "test4",
+				MType: models.Counter,
+				Delta: getPtr(rand.Int64()),
+			},
 			repoCounterExist: true,
 		},
 		{
-			name:            "test 5",
-			url:             "/value/gauge/test5",
-			expectedStatus:  http.StatusOK,
-			repoGaugesKey:   "test5",
-			repoGaugesValue: getPtr(rand.Float64()),
+			name:           "test 5",
+			url:            "/value/gauge/test5",
+			expectedStatus: http.StatusOK,
+			repoGaugesKey:  "test5",
+			repoGaugesValue: &models.Metrics{
+				ID:    "test5",
+				MType: models.Gauge,
+				Value: getPtr(rand.Float64()),
+			},
 			repoGaugesExist: true,
 		},
 	}
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetCounter(gomock.Eq(td.repoCounterKey)).
 				Return(td.repoCounterValue, td.repoCounterExist).AnyTimes()
-			mockRepo.
+			mockReadRepo.
 				EXPECT().
 				GetGauge(gomock.Eq(td.repoGaugesKey)).
 				Return(td.repoGaugesValue, td.repoGaugesExist).AnyTimes()
@@ -233,9 +303,9 @@ func TestSelectReadServerHandler(t *testing.T) {
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
 			if resp.StatusCode == http.StatusOK {
 				if td.repoCounterExist {
-					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue), string(respBody))
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue.Delta), string(respBody))
 				} else if td.repoGaugesExist {
-					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue), string(respBody))
+					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue.Value), string(respBody))
 				}
 			}
 		})
@@ -246,19 +316,22 @@ func getPtr[T any](v T) *T {
 	return &v
 }
 
-func getExpectedPage(counter map[string]*int64, gauge map[string]*float64) []byte {
-	w := new(bytes.Buffer)
-	fmt.Fprintln(w, "<!doctype html><html><body>")
-	fmt.Fprintln(w, "<h3>gauge</h3><pre>")
-	for k, v := range gauge {
-		fmt.Fprintf(w, "%s=%v\n", k, *v)
-	}
-	fmt.Fprintln(w, "</pre>")
+func getExpectedPage(t *testing.T, templateHTML *template.Template, counter map[string]*models.Metrics, gauge map[string]*models.Metrics) ([]byte, error) {
+	t.Helper()
 
-	fmt.Fprintln(w, "<h3>counter</h3><pre>")
-	for k, v := range counter {
-		fmt.Fprintf(w, "%s=%v\n", k, *v)
+	data := struct {
+		GaugeMap   map[string]*models.Metrics
+		CounterMap map[string]*models.Metrics
+	}{
+		GaugeMap:   gauge,
+		CounterMap: counter,
 	}
-	fmt.Fprintln(w, "</pre></body></html>")
-	return w.Bytes()
+	var buffer bytes.Buffer
+	wr := bufio.NewWriter(&buffer)
+	err := templateHTML.Execute(wr, data)
+	if err != nil {
+		return nil, err
+	}
+	wr.Flush()
+	return buffer.Bytes(), nil
 }

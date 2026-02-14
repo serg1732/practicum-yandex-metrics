@@ -1,48 +1,58 @@
 package repository
 
 import (
+	"context"
+	"log/slog"
 	"testing"
 
+	"github.com/serg1732/practicum-yandex-metrics/internal/config"
+	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUpdateGauge(t *testing.T) {
-	memStorage := BuildMemStorage()
+	memStorage := BuildMemStorage(context.Background(), slog.Default(),
+		&config.ServerConfig{
+			RunAddr:         "localhost:8080",
+			StoreInternal:   0,
+			FileStoragePath: "storage-gauge.json",
+			Restore:         false,
+		})
 
 	testData := []struct {
 		name          string
-		gauge         *float64
+		gauge         *models.Metrics
 		expectedExist bool
 	}{
 		{
 			name:          "test1",
-			gauge:         nil,
+			gauge:         &models.Metrics{ID: "test1", MType: models.Gauge, Value: nil},
 			expectedExist: true,
 		},
 		{
 			name:          "test2",
-			gauge:         new(float64),
+			gauge:         &models.Metrics{ID: "test2", MType: models.Gauge, Value: new(float64)},
 			expectedExist: true,
 		},
 		{
 			name: "test3",
-			gauge: func(f float64) *float64 {
+			gauge: &models.Metrics{ID: "test3", MType: models.Gauge, Value: func(f float64) *float64 {
 				return &f
-			}(3.14),
+			}(3.14)},
 			expectedExist: true,
 		},
 		{
 			name: "test4",
-			gauge: func(f float64) *float64 {
+			gauge: &models.Metrics{ID: "test4", MType: models.Gauge, Value: func(f float64) *float64 {
 				return &f
-			}(-3.14),
+			}(3.14)},
 			expectedExist: true,
 		},
 	}
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			memStorage.UpdateGauge(data.name, data.gauge)
+			memStorage.Update(slog.Default(), data.name, data.gauge)
 			val, isExist := memStorage.GetGauge(data.name)
 
 			assert.Equal(t, data.expectedExist, isExist)
@@ -52,42 +62,48 @@ func TestUpdateGauge(t *testing.T) {
 }
 
 func TestUpdateCounter(t *testing.T) {
-	memStorage := BuildMemStorage()
+	memStorage := BuildMemStorage(context.Background(), slog.Default(),
+		&config.ServerConfig{
+			RunAddr:         "localhost:8080",
+			StoreInternal:   10,
+			FileStoragePath: "storage-counter.json",
+			Restore:         false,
+		})
 
 	testData := []struct {
 		name          string
-		counter       *int64
+		counter       *models.Metrics
 		expectedExist bool
 	}{
 		{
 			name:          "test1",
-			counter:       nil,
+			counter:       &models.Metrics{ID: "test1", MType: models.Counter, Delta: nil},
 			expectedExist: true,
 		},
 		{
 			name:          "test2",
-			counter:       new(int64),
+			counter:       &models.Metrics{ID: "test2", MType: models.Counter, Delta: new(int64)},
 			expectedExist: true,
 		},
 		{
 			name: "test3",
-			counter: func(f int64) *int64 {
+			counter: &models.Metrics{ID: "test3", MType: models.Counter, Delta: func(f int64) *int64 {
 				return &f
-			}(314),
+			}(314)},
 			expectedExist: true,
 		},
 		{
 			name: "test4",
-			counter: func(f int64) *int64 {
+			counter: &models.Metrics{ID: "test4", MType: models.Counter, Delta: func(f int64) *int64 {
 				return &f
-			}(-314),
+			}(-314)},
 			expectedExist: true,
 		},
 	}
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			memStorage.UpdateCounter(data.name, data.counter)
+			memStorage.Update(slog.Default(), data.name, data.counter)
 			val, isExist := memStorage.GetCounter(data.name)
 
 			assert.Equal(t, data.expectedExist, isExist)

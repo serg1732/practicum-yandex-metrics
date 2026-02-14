@@ -1,7 +1,7 @@
 package service
 
 import (
-	"log"
+	"log/slog"
 	"math/rand"
 	"runtime"
 	"sync"
@@ -12,7 +12,7 @@ import (
 )
 
 type Collector interface {
-	Run(agentConfig config.AgentConfig) error
+	Run(log *slog.Logger, agentConfig config.AgentConfig) error
 	UpdateMetrics(metrics map[string]float64) int64
 }
 
@@ -31,22 +31,23 @@ type CollectorImpl struct {
 	mutex             sync.Mutex
 }
 
-func (c *CollectorImpl) Run(agentConfig config.AgentConfig) error {
-	log.Println("Starting metrics collector")
+func (c *CollectorImpl) Run(log *slog.Logger, agentConfig config.AgentConfig) error {
+	log.Info("Запуск сборщика метрик")
 	ticks := 0
+	limit := agentConfig.ReportInterval + agentConfig.PollInterval
 	for {
 		metrics := getRuntimeMetrics()
 		c.updateCounter = c.UpdateMetrics(metrics)
 		c.lastUpdateMetrics = metrics
 		ticks += agentConfig.PollInterval
-		if ticks%agentConfig.ReportInterval == 0 {
-			err := c.updaterClient.ExternalUpdateMetrics(c.updateCounter, c.lastUpdateMetrics)
+		if ticks%limit == 0 {
+			err := c.updaterClient.ExternalUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics)
 			if err != nil {
-				return err
+				log.Error("Ошибка при обновлении метрик ", "error", err)
 			}
 			c.updateCounter = 0
 		}
-		ticks %= agentConfig.ReportInterval
+		ticks %= limit
 		time.Sleep(time.Duration(agentConfig.PollInterval) * time.Second)
 	}
 }

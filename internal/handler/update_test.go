@@ -1,18 +1,22 @@
 package handler
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUpdateHandler(t *testing.T) {
-	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage())
+	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(context.Background(), slog.Default(),
+		&config.ServerConfig{}))
 	testData := []struct {
 		name           string
 		req            *http.Request
@@ -38,7 +42,7 @@ func TestUpdateHandler(t *testing.T) {
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
 			mux := http.NewServeMux()
-			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdateHandler)
+			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdatePathValuesHandler(slog.Default()))
 			rr := httptest.NewRecorder()
 			mux.ServeHTTP(rr, td.req)
 			assert.Equal(t, td.expectedStatus, rr.Code)
