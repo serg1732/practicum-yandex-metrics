@@ -1,0 +1,15 @@
+-- migrations/000001_create_metrics_table.up.sql
+-- Создание таблицы метрик
+CREATE TABLE IF NOT EXISTS metrics (
+                         id SERIAL PRIMARY KEY,
+                         name VARCHAR(255) NOT NULL,
+                         metric_type VARCHAR(255) NOT NULL,
+                         delta INTEGER,
+                         value DOUBLE PRECISION
+);
+
+-- Базовый индекс для поиска по названию
+CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(name);
+
+-- Индекс для поиска по типу
+CREATE INDEX IF NOT EXISTS idx_metrics_type ON metrics(metric_type);

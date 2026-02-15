@@ -131,8 +131,10 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 
 func (h *ReadMetricsHandlerImpl) PingDatabase(log *slog.Logger, db *repository.DataBase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if db.Ping() != nil {
+		if db == nil || db.Ping() != nil {
+			log.Error("Ошибка при проверки подключения к БД (строка пустая или нет подключения)")
 			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 		w.WriteHeader(http.StatusOK)
 	}
