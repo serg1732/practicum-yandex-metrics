@@ -13,3 +13,6 @@ CREATE INDEX IF NOT EXISTS idx_metrics_name ON metrics(name);
 
 -- Индекс для поиска по типу
 CREATE INDEX IF NOT EXISTS idx_metrics_type ON metrics(metric_type);
+
+-- уникальность записей
+ALTER TABLE metrics ADD CONSTRAINT metrics_name_type_uniq UNIQUE (name, metric_type);

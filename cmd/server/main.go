@@ -32,21 +32,29 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
-	storage := repository.BuildMemStorage(ctx, log, serverConfig)
-	updaterHandler := handler.BuildUpdateHandler(storage)
-	readHandlers := handler.BuildReadHandler(storage)
 
 	db, err := repository.BuildDataBase(log, serverConfig)
 	if err != nil {
 		log.Error("Ошибка подключения к БД", "error", err)
-	} else {
+	}
+
+	var mux *chi.Mux
+	if db != nil {
 		errMigrate := repository.MigrateDataBase(log, serverConfig)
 		if errMigrate != nil {
 			log.Error("Ошибка при миграции", "error", errMigrate)
 		}
+		updaterHandler := handler.BuildUpdateHandler(db)
+		readHandlers := handler.BuildReadHandler(db)
+		mux = buildRouter(log, db, updaterHandler, readHandlers)
+
+	} else {
+		storage := repository.BuildMemStorage(ctx, log, serverConfig)
+		updaterHandler := handler.BuildUpdateHandler(storage)
+		readHandlers := handler.BuildReadHandler(storage)
+		mux = buildRouter(log, db, updaterHandler, readHandlers)
 	}
 
-	mux := buildRouter(log, db, updaterHandler, readHandlers)
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
 	srv := &http.Server{
 		Addr:    serverConfig.RunAddr,

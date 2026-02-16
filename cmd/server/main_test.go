@@ -193,11 +193,11 @@ func TestAllReadServerHandler(t *testing.T) {
 			mockReadRepo.
 				EXPECT().
 				GetAllCounters().
-				Return(td.expectedCounter)
+				Return(td.expectedCounter, nil)
 			mockReadRepo.
 				EXPECT().
 				GetAllGauges().
-				Return(td.expectedGauges)
+				Return(td.expectedGauges, nil)
 			resp, err := http.DefaultClient.Get(srv.URL)
 			if err != nil {
 				assert.Nil(t, err)
@@ -232,24 +232,20 @@ func TestSelectReadServerHandler(t *testing.T) {
 		expectedStatus   int
 		repoCounterKey   string
 		repoCounterValue *models.Metrics
-		repoCounterExist bool
 		repoGaugesKey    string
 		repoGaugesValue  *models.Metrics
-		repoGaugesExist  bool
 	}{
 		{
-			name:             "test 1 not found",
-			url:              "/value/counter/test1",
-			expectedStatus:   http.StatusNotFound,
-			repoCounterKey:   "test1",
-			repoCounterExist: false,
+			name:           "test 1 not found",
+			url:            "/value/counter/test1",
+			expectedStatus: http.StatusNotFound,
+			repoCounterKey: "test1",
 		},
 		{
-			name:            "test 2 not found",
-			url:             "/value/gauge/test2",
-			expectedStatus:  http.StatusNotFound,
-			repoGaugesKey:   "test2",
-			repoGaugesExist: false,
+			name:           "test 2 not found",
+			url:            "/value/gauge/test2",
+			expectedStatus: http.StatusNotFound,
+			repoGaugesKey:  "test2",
 		},
 		{
 			name:           "test 3 bad type",
@@ -266,7 +262,6 @@ func TestSelectReadServerHandler(t *testing.T) {
 				MType: models.Counter,
 				Delta: getPtr(rand.Int64()),
 			},
-			repoCounterExist: true,
 		},
 		{
 			name:           "test 5",
@@ -278,7 +273,6 @@ func TestSelectReadServerHandler(t *testing.T) {
 				MType: models.Gauge,
 				Value: getPtr(rand.Float64()),
 			},
-			repoGaugesExist: true,
 		},
 	}
 
@@ -287,11 +281,11 @@ func TestSelectReadServerHandler(t *testing.T) {
 			mockReadRepo.
 				EXPECT().
 				GetCounter(gomock.Eq(td.repoCounterKey)).
-				Return(td.repoCounterValue, td.repoCounterExist).AnyTimes()
+				Return(td.repoCounterValue, nil).AnyTimes()
 			mockReadRepo.
 				EXPECT().
 				GetGauge(gomock.Eq(td.repoGaugesKey)).
-				Return(td.repoGaugesValue, td.repoGaugesExist).AnyTimes()
+				Return(td.repoGaugesValue, nil).AnyTimes()
 
 			resp, err := http.DefaultClient.Get(srv.URL + td.url)
 			if err != nil {
@@ -302,9 +296,9 @@ func TestSelectReadServerHandler(t *testing.T) {
 
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
 			if resp.StatusCode == http.StatusOK {
-				if td.repoCounterExist {
+				if td.repoCounterValue != nil {
 					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoCounterValue.Delta), string(respBody))
-				} else if td.repoGaugesExist {
+				} else if td.repoGaugesValue != nil {
 					assert.Equal(t, fmt.Sprintf("%v\n", *td.repoGaugesValue.Value), string(respBody))
 				}
 			}

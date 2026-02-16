@@ -14,10 +14,10 @@ import (
 )
 
 type ReadStorage interface {
-	GetCounter(name string) (*models.Metrics, bool)
-	GetGauge(name string) (*models.Metrics, bool)
-	GetAllCounters() map[string]*models.Metrics
-	GetAllGauges() map[string]*models.Metrics
+	GetCounter(name string) (*models.Metrics, error)
+	GetGauge(name string) (*models.Metrics, error)
+	GetAllCounters() (map[string]*models.Metrics, error)
+	GetAllGauges() (map[string]*models.Metrics, error)
 }
 
 func BuildReadHandler(storage ReadStorage) ReadMetricsHandlerImpl {
@@ -40,12 +40,22 @@ func (h *ReadMetricsHandlerImpl) AllMetricsHandler(log *slog.Logger) http.Handle
 			return
 		}
 
+		gauges, errGauges := h.storage.GetAllGauges()
+		if errGauges != nil {
+			log.Error("Ошибка при получении всех метрик gauges", "error", errGauges)
+		}
+
+		counter, errCounter := h.storage.GetAllCounters()
+		if errCounter != nil {
+			log.Error("Ошибка при получении всех метрик counter", "error", errGauges)
+		}
+
 		data := struct {
 			GaugeMap   map[string]*models.Metrics
 			CounterMap map[string]*models.Metrics
 		}{
-			GaugeMap:   h.storage.GetAllGauges(),
-			CounterMap: h.storage.GetAllCounters(),
+			GaugeMap:   gauges,
+			CounterMap: counter,
 		}
 		err := templateHTML.Execute(w, data)
 		if err != nil {
@@ -63,16 +73,24 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(log *slog.Logger) http.Hand
 		metricName := chi.URLParam(r, "metricName")
 
 		if metricType == models.Counter {
-			val, isExist := h.storage.GetCounter(metricName)
-			if !isExist {
+			val, errCounter := h.storage.GetCounter(metricName)
+			if errCounter != nil {
+				log.Error("Ошибка при получении метрики", "metric_type", metricType, "metric_name", metricName)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			} else if val == nil {
 				log.Error("Метрика не найдена", "metric_type", metricType, "metric_name", metricName)
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
 			fmt.Fprintln(w, *val.Delta)
 		} else if metricType == models.Gauge {
-			val, isExist := h.storage.GetGauge(metricName)
-			if !isExist {
+			val, errGauge := h.storage.GetGauge(metricName)
+			if errGauge != nil {
+				log.Error("Ошибка при получении метрики", "metric_type", metricType, "metric_name", metricName)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			} else if val == nil {
 				log.Error("Метрика не найдена", "name", metricName, "type", metricType)
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -98,8 +116,12 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 		}
 
 		if metric.MType == models.Counter {
-			val, isExist := h.storage.GetCounter(metric.ID)
-			if !isExist {
+			val, errCounter := h.storage.GetCounter(metric.ID)
+			if errCounter != nil {
+				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			} else if val == nil {
 				log.Error("Метрика не найдена", "name", metric.ID, "type", metric.MType)
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -111,8 +133,12 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		} else if metric.MType == models.Gauge {
-			val, isExist := h.storage.GetGauge(metric.ID)
-			if !isExist {
+			val, errGauge := h.storage.GetGauge(metric.ID)
+			if errGauge != nil {
+				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			} else if val == nil {
 				log.Error("Метрика не найдена", "name", metric.ID, "type", metric.MType)
 				w.WriteHeader(http.StatusNotFound)
 				return

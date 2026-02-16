@@ -36,13 +36,15 @@ func (m *MockUpdateStorage) EXPECT() *MockUpdateStorageMockRecorder {
 }
 
 // Update mocks base method.
-func (m *MockUpdateStorage) Update(log *slog.Logger, name string, Data *models.Metrics) {
+func (m *MockUpdateStorage) Update(log *slog.Logger, Data *models.Metrics) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Update", log, name, Data)
+	ret := m.ctrl.Call(m, "Update", log, Data)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockUpdateStorageMockRecorder) Update(log, name, Data interface{}) *gomock.Call {
+func (mr *MockUpdateStorageMockRecorder) Update(log, Data interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockUpdateStorage)(nil).Update), log, name, Data)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockUpdateStorage)(nil).Update), log, Data)
 }

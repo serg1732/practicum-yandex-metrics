@@ -10,7 +10,7 @@ import (
 )
 
 type UpdateStorage interface {
-	Update(log *slog.Logger, name string, Data *models.Metrics)
+	Update(log *slog.Logger, Data *models.Metrics) error
 }
 
 type UpdateHandlerImpl struct {
@@ -39,7 +39,10 @@ func (h *UpdateHandlerImpl) UpdatePathValuesHandler(log *slog.Logger) http.Handl
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			h.storage.Update(log, metricName, &models.Metrics{ID: metricName, MType: models.Gauge, Value: &val})
+			errUpdate := h.storage.Update(log, &models.Metrics{ID: metricName, MType: models.Gauge, Value: &val})
+			if errUpdate != nil {
+				log.Error("Ошибка при обновлении метрики", "error", errUpdate)
+			}
 			w.WriteHeader(http.StatusOK)
 		} else if metricType == models.Counter {
 			val, err := strconv.ParseInt(metricValue, 10, 64)
@@ -48,7 +51,10 @@ func (h *UpdateHandlerImpl) UpdatePathValuesHandler(log *slog.Logger) http.Handl
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			h.storage.Update(log, metricName, &models.Metrics{ID: metricName, MType: models.Counter, Delta: &val})
+			errUpdate := h.storage.Update(log, &models.Metrics{ID: metricName, MType: models.Counter, Delta: &val})
+			if errUpdate != nil {
+				log.Error("Ошибка при обновлении метрики", "error", errUpdate)
+			}
 			w.WriteHeader(http.StatusOK)
 		} else {
 			log.Error("Неизвестный тип метрики из запроса", "type", metricType)
@@ -68,11 +74,17 @@ func (h *UpdateHandlerImpl) UpdateJSONHandler(log *slog.Logger) http.HandlerFunc
 		}
 
 		if metric.MType == models.Gauge {
-			h.storage.Update(log, metric.ID, &metric)
+			err := h.storage.Update(log, &metric)
+			if err != nil {
+				log.Error("Ошибка при обновлении метрики", "error", err)
+			}
 			log.Debug("Успешное обновление метрики", "name", metric.ID, "type", metric.MType)
 			w.WriteHeader(http.StatusOK)
 		} else if metric.MType == models.Counter {
-			h.storage.Update(log, metric.ID, &metric)
+			err := h.storage.Update(log, &metric)
+			if err != nil {
+				log.Error("Ошибка при обновлении метрики", "error", err)
+			}
 			log.Debug("Успешное обновление метрики", "name", metric.ID, "type", metric.MType)
 			w.WriteHeader(http.StatusOK)
 		} else {

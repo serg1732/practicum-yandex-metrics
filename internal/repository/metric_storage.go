@@ -68,27 +68,30 @@ func (m *MemStorageRepository) runSaver(log *slog.Logger) {
 	}()
 }
 
-func (m *MemStorageRepository) GetAllCounters() map[string]*models.Metrics {
-	return m.MemStorage.CounterMap
+func (m *MemStorageRepository) GetAllCounters() (map[string]*models.Metrics, error) {
+	return m.MemStorage.CounterMap, nil
 }
 
-func (m *MemStorageRepository) GetAllGauges() map[string]*models.Metrics {
-	return m.MemStorage.GaugeMap
+func (m *MemStorageRepository) GetAllGauges() (map[string]*models.Metrics, error) {
+	return m.MemStorage.GaugeMap, nil
 }
 
-func (m *MemStorageRepository) GetGauge(name string) (*models.Metrics, bool) {
+func (m *MemStorageRepository) GetGauge(name string) (*models.Metrics, error) {
 	val, isExist := m.MemStorage.GaugeMap[name]
-	return val, isExist
+	if !isExist {
+		return nil, nil
+	}
+	return val, nil
 }
 
-func (m *MemStorageRepository) Update(log *slog.Logger, name string, Data *models.Metrics) {
+func (m *MemStorageRepository) Update(log *slog.Logger, Data *models.Metrics) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if Data.MType == models.Gauge {
-		m.MemStorage.GaugeMap[name] = Data
+		m.MemStorage.GaugeMap[Data.ID] = Data
 	} else if Data.MType == models.Counter {
-		if counter, isExist := m.MemStorage.CounterMap[name]; isExist {
-			m.MemStorage.CounterMap[name].Delta = func(a *models.Metrics, b *models.Metrics) *int64 {
+		if counter, isExist := m.MemStorage.CounterMap[Data.ID]; isExist {
+			m.MemStorage.CounterMap[Data.ID].Delta = func(a *models.Metrics, b *models.Metrics) *int64 {
 				if a == nil || b == nil {
 					return nil
 				}
@@ -96,17 +99,21 @@ func (m *MemStorageRepository) Update(log *slog.Logger, name string, Data *model
 				return &result
 			}(counter, Data)
 		} else {
-			m.MemStorage.CounterMap[name] = Data
+			m.MemStorage.CounterMap[Data.ID] = Data
 		}
 	}
 	if m.Config.StoreInternal == 0 {
 		m.Save(log)
 	}
+	return nil
 }
 
-func (m *MemStorageRepository) GetCounter(name string) (*models.Metrics, bool) {
+func (m *MemStorageRepository) GetCounter(name string) (*models.Metrics, error) {
 	counter, isExist := m.MemStorage.CounterMap[name]
-	return counter, isExist
+	if !isExist {
+		return nil, nil
+	}
+	return counter, nil
 }
 func (m *MemStorageRepository) Save(log *slog.Logger) {
 	file, _ := os.Create(m.Config.FileStoragePath)

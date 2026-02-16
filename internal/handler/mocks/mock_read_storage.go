@@ -35,11 +35,12 @@ func (m *MockReadStorage) EXPECT() *MockReadStorageMockRecorder {
 }
 
 // GetAllCounters mocks base method.
-func (m *MockReadStorage) GetAllCounters() map[string]*models.Metrics {
+func (m *MockReadStorage) GetAllCounters() (map[string]*models.Metrics, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllCounters")
 	ret0, _ := ret[0].(map[string]*models.Metrics)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetAllCounters indicates an expected call of GetAllCounters.
@@ -49,11 +50,12 @@ func (mr *MockReadStorageMockRecorder) GetAllCounters() *gomock.Call {
 }
 
 // GetAllGauges mocks base method.
-func (m *MockReadStorage) GetAllGauges() map[string]*models.Metrics {
+func (m *MockReadStorage) GetAllGauges() (map[string]*models.Metrics, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllGauges")
 	ret0, _ := ret[0].(map[string]*models.Metrics)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetAllGauges indicates an expected call of GetAllGauges.
@@ -63,11 +65,11 @@ func (mr *MockReadStorageMockRecorder) GetAllGauges() *gomock.Call {
 }
 
 // GetCounter mocks base method.
-func (m *MockReadStorage) GetCounter(name string) (*models.Metrics, bool) {
+func (m *MockReadStorage) GetCounter(name string) (*models.Metrics, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCounter", name)
 	ret0, _ := ret[0].(*models.Metrics)
-	ret1, _ := ret[1].(bool)
+	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
@@ -78,11 +80,11 @@ func (mr *MockReadStorageMockRecorder) GetCounter(name interface{}) *gomock.Call
 }
 
 // GetGauge mocks base method.
-func (m *MockReadStorage) GetGauge(name string) (*models.Metrics, bool) {
+func (m *MockReadStorage) GetGauge(name string) (*models.Metrics, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetGauge", name)
 	ret0, _ := ret[0].(*models.Metrics)
-	ret1, _ := ret[1].(bool)
+	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
