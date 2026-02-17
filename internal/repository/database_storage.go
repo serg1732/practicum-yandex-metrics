@@ -30,7 +30,7 @@ func BuildDataBase(log *slog.Logger, config *config.ServerConfig) (*DataBase, er
 	}
 
 	log.Info("Successfully connected to database")
-	return &DataBase{db}, nil
+	return &DataBase{database: db}, nil
 }
 
 func MigrateDataBase(log *slog.Logger, config *config.ServerConfig) error {
@@ -71,7 +71,7 @@ func (db *DataBase) Ping() error {
 }
 
 func (db *DataBase) Update(log *slog.Logger, Data *models.Metrics) error {
-
+	tx, _ := db.database.Begin()
 	query := `
 	INSERT INTO metrics (name, metric_type, delta, value)
 	VALUES ($1, $2, $3, $4)
@@ -90,18 +90,70 @@ func (db *DataBase) Update(log *slog.Logger, Data *models.Metrics) error {
 	`
 
 	if _, err := db.database.ExecContext(context.TODO(), query, Data.ID, Data.MType, Data.Delta, Data.Value); err != nil {
+		tx.Rollback()
 		log.Error("Ошибка при добавлении в БД", "error", err)
 		return err
 	}
 	log.Debug("Добавлена / обновлена новая метрика", "id", Data.ID)
+	tx.Commit()
 	return nil
 }
 
+func (db *DataBase) Updates(log *slog.Logger, Data []*models.Metrics) error {
+	tx, err := db.database.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `
+	INSERT INTO metrics (name, metric_type, delta, value)
+	VALUES ($1, $2, $3, $4)
+	ON CONFLICT (name, metric_type)
+	DO UPDATE SET
+	  delta = CASE
+		WHEN EXCLUDED.delta IS NOT NULL
+		  THEN COALESCE(metrics.delta, 0) + EXCLUDED.delta
+		ELSE metrics.delta
+	  END,
+	  value = CASE
+		WHEN EXCLUDED.value IS NOT NULL
+		  THEN EXCLUDED.value
+		ELSE metrics.value
+	  END;
+	`
+
+	stmt, err := db.database.Prepare(query)
+	if err != nil {
+		return err
+	}
+
+	for _, metric := range Data {
+		res, errStmt := stmt.ExecContext(context.TODO(), metric.ID, metric.MType, metric.Delta, metric.Value)
+		count, errAffected := res.RowsAffected()
+		if errAffected != nil {
+			return errAffected
+		}
+
+		log.Debug("Затронуто строк в БД", "count", count)
+
+		if errStmt != nil {
+			return errStmt
+		}
+	}
+
+	log.Debug("Добавлены / обновлены новые метрики")
+	return tx.Commit()
+}
+
 func (db *DataBase) GetCounter(name string) (*models.Metrics, error) {
+	tx, errTx := db.database.Begin()
+	if errTx != nil {
+		return nil, errTx
+	}
+	defer tx.Rollback()
 	row := db.database.QueryRowContext(context.TODO(),
-		"SELECT name, metric_type, value FROM metrics WHERE name = @name && metric_type = @type",
-		sql.Named("name", name),
-		sql.Named("type", models.Counter))
+		"SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Counter)
 	if row.Err() != nil {
 		return nil, row.Err()
 	}
@@ -110,13 +162,12 @@ func (db *DataBase) GetCounter(name string) (*models.Metrics, error) {
 	if err != nil {
 		return nil, err
 	}
+	tx.Commit()
 	return &metrics, nil
 }
 func (db *DataBase) GetGauge(name string) (*models.Metrics, error) {
 	row := db.database.QueryRowContext(context.TODO(),
-		"SELECT name, metric_type, value FROM metrics WHERE name = @name && metric_type = @type",
-		sql.Named("name", name),
-		sql.Named("type", models.Gauge))
+		"SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Gauge)
 	if row.Err() != nil {
 		return nil, row.Err()
 	}

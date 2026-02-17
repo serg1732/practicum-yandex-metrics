@@ -100,7 +100,7 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(log *slog.Logger) http.Hand
 			log.Error("Неизвестный тип метрики", "name", metricName, "type", metricType)
 			w.WriteHeader(http.StatusNotFound)
 		}
-		log.Info("Метрика найдена", "name", metricName, "type", metricType)
+		log.Debug("Метрика найдена", "name", metricName, "type", metricType)
 		w.WriteHeader(http.StatusOK)
 	}
 }
@@ -113,12 +113,15 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 		if err := dec.Decode(&metric); err != nil {
 			log.Error("Ошибка конвертации JSON из тела запроса", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
+
+		log.Debug("Поиск метрики", "name", metric.ID, "type", metric.MType)
 
 		if metric.MType == models.Counter {
 			val, errCounter := h.storage.GetCounter(metric.ID)
 			if errCounter != nil {
-				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType)
+				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType, "error", errCounter)
 				w.WriteHeader(http.StatusNotFound)
 				return
 			} else if val == nil {
@@ -132,10 +135,11 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 				log.Error("Ошибка при конвертации в JSON данных для отправки", "error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
+			log.Debug("Найдена метрика", "name", metric.ID, "type", metric.MType, "delta", metric.Delta)
 		} else if metric.MType == models.Gauge {
 			val, errGauge := h.storage.GetGauge(metric.ID)
 			if errGauge != nil {
-				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType)
+				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType, "error", errGauge)
 				w.WriteHeader(http.StatusNotFound)
 				return
 			} else if val == nil {
@@ -149,9 +153,12 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 				log.Error("Ошибка при конвертации в JSON данных для отправки", "error", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
+			log.Debug("Найдена метрика", "name", metric.ID, "type", metric.MType, "value", metric.Value)
 		} else {
 			w.WriteHeader(http.StatusNotFound)
+			return
 		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 

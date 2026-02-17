@@ -11,6 +11,7 @@ import (
 
 type UpdateStorage interface {
 	Update(log *slog.Logger, Data *models.Metrics) error
+	Updates(log *slog.Logger, Data []*models.Metrics) error
 }
 
 type UpdateHandlerImpl struct {
@@ -92,5 +93,24 @@ func (h *UpdateHandlerImpl) UpdateJSONHandler(log *slog.Logger) http.HandlerFunc
 			http.Error(w, "Invalid metric type", http.StatusBadRequest)
 			return
 		}
+	}
+}
+
+func (h *UpdateHandlerImpl) UpdateValues(log *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var metrics []*models.Metrics
+		dec := json.NewDecoder(r.Body)
+		if err := dec.Decode(&metrics); err != nil {
+			log.Error("Ошибка при конвертации тела запрос в JSON")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := h.storage.Updates(log, metrics); err != nil {
+			log.Error("Ошибка при обновлении метрик", "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		log.Debug("Обновлены метрики", "metrics", metrics)
+		w.WriteHeader(http.StatusOK)
 	}
 }

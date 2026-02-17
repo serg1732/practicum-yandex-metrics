@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS metrics (
                          id SERIAL PRIMARY KEY,
                          name VARCHAR(255) NOT NULL,
                          metric_type VARCHAR(255) NOT NULL,
-                         delta INTEGER,
+                         delta BIGINT,
                          value DOUBLE PRECISION
 );
 

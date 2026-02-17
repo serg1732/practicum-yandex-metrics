@@ -48,3 +48,17 @@ func (mr *MockUpdateStorageMockRecorder) Update(log, Data interface{}) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockUpdateStorage)(nil).Update), log, Data)
 }
+
+// Updates mocks base method.
+func (m *MockUpdateStorage) Updates(log *slog.Logger, Data []*models.Metrics) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Updates", log, Data)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Updates indicates an expected call of Updates.
+func (mr *MockUpdateStorageMockRecorder) Updates(log, Data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Updates", reflect.TypeOf((*MockUpdateStorage)(nil).Updates), log, Data)
+}

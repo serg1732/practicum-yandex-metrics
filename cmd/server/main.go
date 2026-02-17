@@ -88,6 +88,11 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 	})
 	router.Use(logger.WithLogger(log))
 	router.Use(handler.WithGzipCompress(log))
+
+	router.Route("/updates", func(r chi.Router) {
+		r.Post("/", updateHandlers.UpdateValues(log))
+	})
+
 	router.Route("/update", func(r chi.Router) {
 		r.Post("/", updateHandlers.UpdateJSONHandler(log))
 		r.Post("/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdatePathValuesHandler(log))

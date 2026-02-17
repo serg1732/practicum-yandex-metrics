@@ -16,6 +16,7 @@ import (
 type UpdaterClient interface {
 	ExternalUpdateMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error
 	ExternalUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error
+	ExternalBatchUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error
 }
 
 type RestyUpdaterClient struct {
@@ -49,6 +50,35 @@ func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounte
 			slog.Any("error", err))
 		return errors.New("ошибка отправки метрики counter")
 	}
+	return nil
+}
+
+func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error {
+	modelMetrics := make([]*models.Metrics, 0, len(metrics)+1)
+	for k, v := range metrics {
+		modelMetrics = append(modelMetrics, &models.Metrics{ID: k, MType: models.Gauge, Value: &v})
+	}
+	modelMetrics = append(modelMetrics, &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: &updateCounter})
+	jsonMetrics, err := json.Marshal(modelMetrics)
+	if err != nil {
+		return errors.New("ошибка конвертации метрики gauge в json")
+	}
+	gzipMetric, err := gzipBody(jsonMetrics)
+	if err != nil {
+		return errors.New("ошибка сжатия (gzip) метрики")
+	}
+
+	urlModified := fmt.Sprintf("%s/updates/", r.host)
+	resp, err := r.httpClient.R().
+		SetHeader("Content-Encoding", "gzip").
+		SetHeader("Content-Type", "application/json").
+		SetBody(gzipMetric).
+		Post(urlModified)
+	if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
+		log.Debug("Ошибка обновления метрик", "metrics", string(jsonMetrics))
+		return errors.New("ошибка отправки метрики gauge")
+	}
+
 	return nil
 }
 

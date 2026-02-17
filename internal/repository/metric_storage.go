@@ -108,6 +108,15 @@ func (m *MemStorageRepository) Update(log *slog.Logger, Data *models.Metrics) er
 	return nil
 }
 
+func (m *MemStorageRepository) Updates(log *slog.Logger, Data []*models.Metrics) error {
+	for _, metric := range Data {
+		if err := m.Update(log, metric); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *MemStorageRepository) GetCounter(name string) (*models.Metrics, error) {
 	counter, isExist := m.MemStorage.CounterMap[name]
 	if !isExist {
