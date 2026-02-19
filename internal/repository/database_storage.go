@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
+	"github.com/serg1732/practicum-yandex-metrics/internal/helpers"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -71,105 +74,116 @@ func (db *DataBase) Ping() error {
 }
 
 func (db *DataBase) Update(log *slog.Logger, Data *models.Metrics) error {
-	tx, _ := db.database.Begin()
-	query := `
-	INSERT INTO metrics (name, metric_type, delta, value)
-	VALUES ($1, $2, $3, $4)
-	ON CONFLICT (name, metric_type)
-	DO UPDATE SET
-	  delta = CASE
-		WHEN EXCLUDED.delta IS NOT NULL
-		  THEN COALESCE(metrics.delta, 0) + EXCLUDED.delta
-		ELSE metrics.delta
-	  END,
-	  value = CASE
-		WHEN EXCLUDED.value IS NOT NULL
-		  THEN EXCLUDED.value
-		ELSE metrics.value
-	  END;
-	`
+	ctx := context.Background()
+	return retry(ctx, func() error {
+		tx, errTx := db.database.Begin()
+		if errTx != nil {
+			return errTx
+		}
+		defer tx.Rollback()
+		query := `
+		INSERT INTO metrics (name, metric_type, delta, value)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (name, metric_type)
+		DO UPDATE SET
+	  	delta = CASE
+			WHEN EXCLUDED.delta IS NOT NULL
+		  	THEN COALESCE(metrics.delta, 0) + EXCLUDED.delta
+			ELSE metrics.delta
+	  	END,
+	  	value = CASE
+			WHEN EXCLUDED.value IS NOT NULL
+		  	THEN EXCLUDED.value
+			ELSE metrics.value
+	  	END;
+		`
 
-	if _, err := db.database.ExecContext(context.TODO(), query, Data.ID, Data.MType, Data.Delta, Data.Value); err != nil {
-		tx.Rollback()
-		log.Error("Ошибка при добавлении в БД", "error", err)
-		return err
-	}
-	log.Debug("Добавлена / обновлена новая метрика", "id", Data.ID)
-	tx.Commit()
-	return nil
+		if _, err := db.database.ExecContext(context.TODO(), query, Data.ID, Data.MType, Data.Delta, Data.Value); err != nil {
+			log.Error("Ошибка при добавлении в БД", "error", err)
+			return err
+		}
+		log.Debug("Добавлена / обновлена новая метрика", "id", Data.ID)
+		return tx.Commit()
+	})
 }
 
 func (db *DataBase) Updates(log *slog.Logger, Data []*models.Metrics) error {
-	tx, err := db.database.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+	ctx := context.Background()
+	return retry(ctx, func() error {
+		tx, err := db.database.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
 
-	query := `
-	INSERT INTO metrics (name, metric_type, delta, value)
-	VALUES ($1, $2, $3, $4)
-	ON CONFLICT (name, metric_type)
-	DO UPDATE SET
-	  delta = CASE
-		WHEN EXCLUDED.delta IS NOT NULL
-		  THEN COALESCE(metrics.delta, 0) + EXCLUDED.delta
-		ELSE metrics.delta
-	  END,
-	  value = CASE
-		WHEN EXCLUDED.value IS NOT NULL
-		  THEN EXCLUDED.value
-		ELSE metrics.value
-	  END;
-	`
+		query := `
+		INSERT INTO metrics (name, metric_type, delta, value)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (name, metric_type)
+		DO UPDATE SET
+	  	delta = CASE
+			WHEN EXCLUDED.delta IS NOT NULL
+		  	THEN COALESCE(metrics.delta, 0) + EXCLUDED.delta
+			ELSE metrics.delta
+	  	END,
+	  	value = CASE
+			WHEN EXCLUDED.value IS NOT NULL
+		  	THEN EXCLUDED.value
+			ELSE metrics.value
+	  	END;
+		`
 
-	stmt, err := db.database.Prepare(query)
-	if err != nil {
-		return err
-	}
-
-	for _, metric := range Data {
-		res, errStmt := stmt.ExecContext(context.TODO(), metric.ID, metric.MType, metric.Delta, metric.Value)
-		count, errAffected := res.RowsAffected()
-		if errAffected != nil {
-			return errAffected
+		stmt, err := db.database.Prepare(query)
+		if err != nil {
+			return err
 		}
 
-		log.Debug("Затронуто строк в БД", "count", count)
-
-		if errStmt != nil {
-			return errStmt
+		for _, metric := range Data {
+			_, errStmt := stmt.ExecContext(ctx, metric.ID, metric.MType, metric.Delta, metric.Value)
+			if errStmt != nil {
+				return errStmt
+			}
 		}
-	}
 
-	log.Debug("Добавлены / обновлены новые метрики")
-	return tx.Commit()
+		log.Debug("Добавлены / обновлены новые метрики")
+		return tx.Commit()
+	})
 }
 
 func (db *DataBase) GetCounter(name string) (*models.Metrics, error) {
-	tx, errTx := db.database.Begin()
-	if errTx != nil {
-		return nil, errTx
-	}
-	defer tx.Rollback()
-	row := db.database.QueryRowContext(context.TODO(),
-		"SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Counter)
-	if row.Err() != nil {
-		return nil, row.Err()
+	ctx := context.Background()
+	var row *sql.Row
+	errRetry := retry(ctx, func() error {
+		row = db.database.QueryRowContext(context.TODO(),
+			"SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Counter)
+		if row.Err() != nil {
+			return row.Err()
+		}
+		return nil
+	})
+	if errRetry != nil {
+		return nil, errRetry
 	}
 	var metrics models.Metrics
 	err := row.Scan(&metrics.ID, &metrics.MType, &metrics.Delta)
 	if err != nil {
 		return nil, err
 	}
-	tx.Commit()
 	return &metrics, nil
 }
 func (db *DataBase) GetGauge(name string) (*models.Metrics, error) {
-	row := db.database.QueryRowContext(context.TODO(),
-		"SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Gauge)
-	if row.Err() != nil {
-		return nil, row.Err()
+	ctx := context.Background()
+	var row *sql.Row
+	errRetry := retry(ctx, func() error {
+		row = db.database.QueryRowContext(context.TODO(),
+			"SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Gauge)
+		if row.Err() != nil {
+			return row.Err()
+		}
+		return nil
+	})
+	if errRetry != nil {
+		return nil, errRetry
 	}
 	var metrics models.Metrics
 	err := row.Scan(&metrics.ID, &metrics.MType, &metrics.Value)
@@ -180,43 +194,85 @@ func (db *DataBase) GetGauge(name string) (*models.Metrics, error) {
 }
 func (db *DataBase) GetAllCounters() (map[string]*models.Metrics, error) {
 	counters := make(map[string]*models.Metrics)
-	rows, err := db.database.QueryContext(context.TODO(),
-		"SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1", models.Counter)
-	if err != nil {
-		return nil, err
-	}
-	if rows.Err() != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var metrics models.Metrics
-		errScan := rows.Scan(&metrics.ID, &metrics.MType, &metrics.Delta)
-		if errScan != nil {
-			return nil, errScan
+	ctx := context.Background()
+	var rows *sql.Rows
+	var err error
+	errRetry := retry(ctx, func() error {
+		rows, err = db.database.QueryContext(context.TODO(),
+			"SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1", models.Counter)
+		if err != nil {
+			return err
 		}
-		counters[metrics.ID] = &metrics
-	}
-	return counters, nil
+		if rows.Err() != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var metrics models.Metrics
+			errScan := rows.Scan(&metrics.ID, &metrics.MType, &metrics.Delta)
+			if errScan != nil {
+				return errScan
+			}
+			counters[metrics.ID] = &metrics
+		}
+		return nil
+	})
+	return counters, errRetry
 }
 func (db *DataBase) GetAllGauges() (map[string]*models.Metrics, error) {
 	gauges := make(map[string]*models.Metrics)
-	rows, err := db.database.QueryContext(context.TODO(),
-		"SELECT name, metric_type, value FROM metrics WHERE metric_type = $1", models.Gauge)
-	if err != nil {
-		return nil, err
-	}
-	if rows.Err() != nil {
-		return nil, rows.Err()
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var metrics models.Metrics
-		errScan := rows.Scan(&metrics.ID, &metrics.MType, &metrics.Value)
-		if errScan != nil {
-			return nil, errScan
+	ctx := context.Background()
+	var rows *sql.Rows
+	var err error
+	errRetry := retry(ctx, func() error {
+		rows, err = db.database.QueryContext(context.TODO(),
+			"SELECT name, metric_type, value FROM metrics WHERE metric_type = $1", models.Gauge)
+		if err != nil {
+			return err
 		}
-		gauges[metrics.ID] = &metrics
+		if rows.Err() != nil {
+			return rows.Err()
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var metrics models.Metrics
+			errScan := rows.Scan(&metrics.ID, &metrics.MType, &metrics.Value)
+			if errScan != nil {
+				return errScan
+			}
+			gauges[metrics.ID] = &metrics
+		}
+		return nil
+	})
+	if errRetry != nil {
+		return nil, errRetry
 	}
 	return gauges, nil
+}
+
+func retry(ctx context.Context, fn func() error) error {
+	const maxRetries = 3
+	delay := 1
+	classify := helpers.NewPostgresErrorClassifier()
+	var lastErr error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+
+		if classify.Classify(err) != helpers.Retriable {
+			return err
+		}
+		lastErr = err
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(delay) * time.Second):
+		}
+		delay += 2
+	}
+
+	return fmt.Errorf("превышено число попыток запросов %s", lastErr)
 }

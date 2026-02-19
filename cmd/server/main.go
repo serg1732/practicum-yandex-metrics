@@ -22,7 +22,7 @@ import (
 func main() {
 	log := logger.NewSlogLogger(slog.LevelInfo)
 	serverConfig, errConfig := config.GetSeverConfig()
-	//log.Info("Прочитан конфиг:", "config", serverConfig)
+	log.Debug("Прочитан конфиг:", "config", serverConfig)
 	if errConfig != nil {
 		log.Error("Ошибка парсинга env значений", "error", errConfig)
 	}
