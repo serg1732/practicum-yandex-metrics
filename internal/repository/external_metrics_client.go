@@ -61,11 +61,13 @@ func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(log *slog.Logger, upd
 	modelMetrics = append(modelMetrics, &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: &updateCounter})
 	jsonMetrics, err := json.Marshal(modelMetrics)
 	if err != nil {
-		return errors.New("ошибка конвертации метрики gauge в json")
+		log.Error("ошибка конвертации метрики gauge в json", "error", err)
+		return err
 	}
 	gzipMetric, err := gzipBody(jsonMetrics)
 	if err != nil {
-		return errors.New("ошибка сжатия (gzip) метрики")
+		log.Error("ошибка сжатия (gzip) метрики", "error", err)
+		return err
 	}
 
 	urlModified := fmt.Sprintf("%s/updates/", r.host)

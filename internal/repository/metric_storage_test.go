@@ -47,8 +47,8 @@ func TestUpdateGauge(t *testing.T) {
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			errUpdate := memStorage.Update(slog.Default(), data.gauge)
-			val, err := memStorage.GetGauge(data.name)
+			errUpdate := memStorage.Update(t.Context(), slog.Default(), data.gauge)
+			val, err := memStorage.GetGauge(t.Context(), data.name)
 
 			assert.Nil(t, err)
 			assert.Nil(t, errUpdate)
@@ -96,8 +96,8 @@ func TestUpdateCounter(t *testing.T) {
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			errUpdate := memStorage.Update(slog.Default(), data.counter)
-			val, err := memStorage.GetCounter(data.name)
+			errUpdate := memStorage.Update(t.Context(), slog.Default(), data.counter)
+			val, err := memStorage.GetCounter(t.Context(), data.name)
 			assert.Nil(t, err)
 			assert.Nil(t, errUpdate)
 			if assert.NotNil(t, data.counter) {

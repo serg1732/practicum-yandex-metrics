@@ -1,131 +1,156 @@
 package repository
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"regexp"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/pashagolub/pgxmock/v4"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSuccessRepositoryPing(t *testing.T) {
-	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
+	defer mock.Close()
 
-	rep := DataBase{database: db}
+	rep := DataBase{database: mock}
 	mock.ExpectPing()
-	errPing := rep.Ping()
+	errPing := rep.Ping(t.Context())
 	assert.NoError(t, errPing)
 }
 
 func TestNegativeRepositoryPing(t *testing.T) {
-	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
+	defer mock.Close()
 
-	rep := DataBase{database: db}
+	rep := DataBase{database: mock}
 	mock.ExpectPing().WillReturnError(fmt.Errorf("ping error"))
-	errPing := rep.Ping()
+	errPing := rep.Ping(t.Context())
 	if assert.NotNil(t, errPing) {
 		assert.Contains(t, errPing.Error(), "ping error")
 	}
 }
 
 func TestSuccessGetCounter(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
+	defer mock.Close()
+
+	rep := DataBase{database: mock}
 	name := uuid.New().String()
 	cnt := rand.Int64()
 	exptectedMetrics := models.Metrics{ID: name, MType: models.Counter, Delta: &cnt}
-	q := regexp.QuoteMeta(`SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2`)
+	q := `SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2`
 
+	mock.ExpectBegin()
 	mock.ExpectQuery(q).WithArgs(name, models.Counter).WillReturnRows(
-		sqlmock.NewRows([]string{"name", "metric_type", "delta"}).AddRow(name, models.Counter, cnt))
-	metric, err := rep.GetCounter(name)
+		pgxmock.NewRows([]string{"name", "metric_type", "delta"}).AddRow(name, models.Counter, &cnt))
+	mock.ExpectCommit()
+	metric, err := rep.GetCounter(t.Context(), name)
 	assert.NoError(t, err)
 	assert.Equal(t, exptectedMetrics, *metric)
 }
 
 func TestNegativeGetCounter(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
+	defer mock.Close()
+
+	rep := DataBase{database: mock}
 	name := uuid.New().String()
-	q := regexp.QuoteMeta(`SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2`)
-	mock.ExpectQuery(q).WithArgs(name, models.Counter).WillReturnError(fmt.Errorf("sql error"))
-	_, err = rep.GetCounter(name)
+	cnt := rand.Int64()
+	q := `SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2`
+	mock.ExpectBegin()
+	mock.ExpectQuery(q).WithArgs(name, models.Counter).WillReturnRows(
+		pgxmock.NewRows([]string{"name", "metric_type", "delta"}).AddRow(name, models.Counter, &cnt).RowError(
+			0, errors.New("sql error")))
+	mock.ExpectRollback()
+	_, err = rep.GetCounter(t.Context(), name)
 	if assert.NotNil(t, err) {
 		assert.Contains(t, err.Error(), "sql error")
 	}
 }
 
 func TestSuccessGetGauge(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
-	name := uuid.New().String()
-	cnt := rand.Float64()
-	exptectedMetrics := models.Metrics{ID: name, MType: models.Counter, Value: &cnt}
-	q := regexp.QuoteMeta(`SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2`)
+	defer mock.Close()
 
+	rep := DataBase{database: mock}
+	name := uuid.New().String()
+	gauge := rand.Float64()
+	exptectedMetrics := models.Metrics{ID: name, MType: models.Counter, Value: &gauge}
+	q := `SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2`
+
+	mock.ExpectBegin()
 	mock.ExpectQuery(q).WithArgs(name, models.Gauge).WillReturnRows(
-		sqlmock.NewRows([]string{"name", "metric_type", "value"}).AddRow(name, models.Counter, cnt))
-	metric, err := rep.GetGauge(name)
+		pgxmock.NewRows([]string{"name", "metric_type", "value"}).AddRow(name, models.Counter, &gauge))
+	mock.ExpectCommit()
+	metric, err := rep.GetGauge(t.Context(), name)
 	assert.NoError(t, err)
 	assert.Equal(t, exptectedMetrics, *metric)
 }
 
 func TestNegativeGetGauge(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
-	name := uuid.New().String()
-	q := regexp.QuoteMeta(`SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2`)
+	defer mock.Close()
 
-	mock.ExpectQuery(q).WithArgs(name, models.Gauge).WillReturnError(fmt.Errorf("sql error"))
-	_, err = rep.GetGauge(name)
+	rep := DataBase{database: mock}
+	name := uuid.New().String()
+	gauge := rand.Float64()
+	q := `SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2`
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(q).WithArgs(name, models.Gauge).WillReturnRows(
+		pgxmock.NewRows([]string{"name", "metric_type", "value"}).AddRow(name, models.Counter, &gauge).
+			RowError(0, errors.New("sql error")))
+	mock.ExpectRollback()
+	_, err = rep.GetGauge(t.Context(), name)
 	if assert.NotNil(t, err) {
 		assert.Contains(t, err.Error(), "sql error")
 	}
 }
 
 func TestSuccessGetAllCounters(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
-	q := regexp.QuoteMeta(`SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1`)
+	defer mock.Close()
+
+	rep := DataBase{database: mock}
+	q := `SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1`
 
 	name := uuid.New().String()
 	cnt := rand.Int64()
 	expectedMetrics := map[string]*models.Metrics{name: {ID: name, MType: models.Counter, Delta: &cnt}}
+	mock.ExpectBegin()
 	mock.ExpectQuery(q).WithArgs(models.Counter).WillReturnRows(
-		sqlmock.NewRows([]string{"name", "metric_type", "delta"}).AddRow(name, models.Counter, cnt))
-	actualMetrics, errGetAll := rep.GetAllCounters()
+		pgxmock.NewRows([]string{"name", "metric_type", "delta"}).AddRow(name, models.Counter, &cnt))
+	mock.ExpectCommit()
+	actualMetrics, errGetAll := rep.GetAllCounters(t.Context())
 	assert.NoError(t, errGetAll)
 	assert.Equal(t, expectedMetrics, actualMetrics)
 }
 
 func TestErrorGetAllCounters(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err, "ошибка создания мока")
-	defer db.Close()
-	rep := DataBase{database: db}
-	q := regexp.QuoteMeta(`SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1`)
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+	assert.NoError(t, err)
+	defer mock.Close()
 
+	rep := DataBase{database: mock}
+	q := `SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1`
+
+	mock.ExpectBegin()
 	mock.ExpectQuery(q).WithArgs(models.Counter).WillReturnError(fmt.Errorf("sql error"))
-	actualMetrics, errGetAll := rep.GetAllCounters()
+	actualMetrics, errGetAll := rep.GetAllCounters(t.Context())
+	mock.ExpectRollback()
 	assert.Empty(t, actualMetrics)
 	if assert.NotNil(t, errGetAll, "ожидалась ошибка") {
 		assert.Contains(t, errGetAll.Error(), "sql error")
@@ -133,31 +158,40 @@ func TestErrorGetAllCounters(t *testing.T) {
 }
 
 func TestSuccessGetAllGauges(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
-	q := regexp.QuoteMeta(`SELECT name, metric_type, value FROM metrics WHERE metric_type = $1`)
+	defer mock.Close()
+
+	rep := DataBase{database: mock}
+	q := `SELECT name, metric_type, value FROM metrics WHERE metric_type = $1`
 
 	name := uuid.New().String()
 	val := rand.Float64()
 	expectedMetrics := map[string]*models.Metrics{name: {ID: name, MType: models.Gauge, Value: &val}}
+	mock.ExpectBegin()
 	mock.ExpectQuery(q).WithArgs(models.Gauge).WillReturnRows(
-		sqlmock.NewRows([]string{"name", "metric_type", "value"}).AddRow(name, models.Gauge, val))
-	actualMetrics, errGetAll := rep.GetAllGauges()
+		pgxmock.NewRows([]string{"name", "metric_type", "value"}).AddRow(name, models.Gauge, &val))
+	mock.ExpectCommit()
+	actualMetrics, errGetAll := rep.GetAllGauges(t.Context())
 	assert.NoError(t, errGetAll)
 	assert.Equal(t, expectedMetrics, actualMetrics)
 }
 
 func TestErrorGetAllGauges(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err, "ошибка создания мока")
-	defer db.Close()
-	rep := DataBase{database: db}
-	q := regexp.QuoteMeta(`SELECT name, metric_type, value FROM metrics WHERE metric_type = $1`)
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+	assert.NoError(t, err)
+	defer mock.Close()
 
-	mock.ExpectQuery(q).WithArgs(models.Gauge).WillReturnError(fmt.Errorf("sql error"))
-	actualMetrics, errGetAll := rep.GetAllGauges()
+	rep := DataBase{database: mock}
+	q := `SELECT name, metric_type, value FROM metrics WHERE metric_type = $1`
+	name := uuid.New().String()
+	val := rand.Float64()
+	mock.ExpectBegin()
+	mock.ExpectQuery(q).WithArgs(models.Gauge).WillReturnRows(
+		pgxmock.NewRows([]string{"name", "metric_type", "value"}).AddRow(name, models.Gauge, &val).
+			RowError(0, errors.New("sql error")))
+	mock.ExpectRollback()
+	actualMetrics, errGetAll := rep.GetAllGauges(t.Context())
 	assert.Empty(t, actualMetrics)
 	if assert.NotNil(t, errGetAll, "ожидалась ошибка") {
 		assert.Contains(t, errGetAll.Error(), "sql error")
@@ -165,13 +199,12 @@ func TestErrorGetAllGauges(t *testing.T) {
 }
 
 func TestSuccessInsertUpdateGauge(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err, "ошибка создания мока")
-	defer db.Close()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+	assert.NoError(t, err)
+	defer mock.Close()
 
-	rep := DataBase{database: db}
-	q := regexp.QuoteMeta(
-		`INSERT INTO metrics (name, metric_type, delta, value)
+	rep := DataBase{database: mock}
+	q := `INSERT INTO metrics (name, metric_type, delta, value)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (name, metric_type)
 		DO UPDATE SET
@@ -184,26 +217,26 @@ func TestSuccessInsertUpdateGauge(t *testing.T) {
 			WHEN EXCLUDED.value IS NOT NULL
 		  	THEN EXCLUDED.value
 			ELSE metrics.value
-	  	END;`)
+	  	END;`
 
 	val := rand.Float64()
+	var delta *int64
 	expectedMetric := models.Metrics{ID: uuid.New().String(), MType: models.Gauge, Value: &val}
 	mock.ExpectBegin()
-	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, nil, *expectedMetric.Value).WillReturnResult(
-		sqlmock.NewResult(1, 1))
+	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, delta, expectedMetric.Value).WillReturnResult(
+		pgxmock.NewResult("1", 1))
 	mock.ExpectCommit()
-	errUpdate := rep.Update(slog.Default(), &expectedMetric)
+	errUpdate := rep.Update(t.Context(), slog.Default(), &expectedMetric)
 	assert.NoError(t, errUpdate)
 }
 
 func TestNegativeInsertUpdateGauge(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err, "ошибка создания мока")
-	defer db.Close()
+	mock, err := pgxmock.NewPool(pgxmock.QueryMatcherOption(pgxmock.QueryMatcherEqual))
+	assert.NoError(t, err)
+	defer mock.Close()
 
-	rep := DataBase{database: db}
-	q := regexp.QuoteMeta(
-		`INSERT INTO metrics (name, metric_type, delta, value)
+	rep := DataBase{database: mock}
+	q := `INSERT INTO metrics (name, metric_type, delta, value)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (name, metric_type)
 		DO UPDATE SET
@@ -216,25 +249,26 @@ func TestNegativeInsertUpdateGauge(t *testing.T) {
 			WHEN EXCLUDED.value IS NOT NULL
 		  	THEN EXCLUDED.value
 			ELSE metrics.value
-	  	END;`)
+	  	END;`
 
 	val := rand.Float64()
+	var delta *int64
 	expectedMetric := models.Metrics{ID: uuid.New().String(), MType: models.Gauge, Value: &val}
 	mock.ExpectBegin()
-	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, nil, *expectedMetric.Value).WillReturnError(fmt.Errorf("sql error"))
+	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, delta, expectedMetric.Value).WillReturnError(fmt.Errorf("sql error"))
 	mock.ExpectRollback()
-	errUpdate := rep.Update(slog.Default(), &expectedMetric)
+	errUpdate := rep.Update(t.Context(), slog.Default(), &expectedMetric)
 	if assert.NotNil(t, errUpdate) {
 		assert.Contains(t, errUpdate.Error(), "sql error")
 	}
 }
 
 func TestSuccessInsertCounter(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err, "ошибка создания мока")
-	defer db.Close()
+	mock, err := pgxmock.NewPool()
+	assert.NoError(t, err)
+	defer mock.Close()
 
-	rep := DataBase{database: db}
+	rep := DataBase{database: mock}
 	q := regexp.QuoteMeta(
 		`INSERT INTO metrics (name, metric_type, delta, value)
 		VALUES ($1, $2, $3, $4)
@@ -252,21 +286,22 @@ func TestSuccessInsertCounter(t *testing.T) {
 	  	END;`)
 
 	cnt := rand.Int64()
+	var val *float64
 	expectedMetric := models.Metrics{ID: uuid.New().String(), MType: models.Counter, Delta: &cnt}
 	mock.ExpectBegin()
-	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, *expectedMetric.Delta, nil).WillReturnResult(
-		sqlmock.NewResult(1, 1))
+	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, expectedMetric.Delta, val).WillReturnResult(
+		pgxmock.NewResult("1", 1))
 	mock.ExpectCommit()
-	errUpdate := rep.Update(slog.Default(), &expectedMetric)
+	errUpdate := rep.Update(t.Context(), slog.Default(), &expectedMetric)
 	assert.NoError(t, errUpdate)
 }
 
 func TestNegativeInsertUpdateCounter(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	assert.NoError(t, err, "ошибка создания мока")
-	defer db.Close()
+	mock, err := pgxmock.NewPool()
+	assert.NoError(t, err)
+	defer mock.Close()
 
-	rep := DataBase{database: db}
+	rep := DataBase{database: mock}
 	q := regexp.QuoteMeta(
 		`INSERT INTO metrics (name, metric_type, delta, value)
 		VALUES ($1, $2, $3, $4)
@@ -284,21 +319,23 @@ func TestNegativeInsertUpdateCounter(t *testing.T) {
 	  	END;`)
 
 	cnt := rand.Int64()
+	var val *float64
 	expectedMetric := models.Metrics{ID: uuid.New().String(), MType: models.Counter, Delta: &cnt}
 	mock.ExpectBegin()
-	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, *expectedMetric.Delta, nil).WillReturnError(fmt.Errorf("sql error"))
+	mock.ExpectExec(q).WithArgs(expectedMetric.ID, expectedMetric.MType, expectedMetric.Delta, val).WillReturnError(fmt.Errorf("sql error"))
 	mock.ExpectRollback()
-	errUpdate := rep.Update(slog.Default(), &expectedMetric)
+	errUpdate := rep.Update(t.Context(), slog.Default(), &expectedMetric)
 	if assert.NotNil(t, errUpdate) {
 		assert.Contains(t, errUpdate.Error(), "sql error")
 	}
 }
 
 func TestSuccessAllUpdateType(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool()
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
+	defer mock.Close()
+
+	rep := DataBase{database: mock}
 
 	q := regexp.QuoteMeta(
 		`INSERT INTO metrics (name, metric_type, delta, value)
@@ -322,23 +359,25 @@ func TestSuccessAllUpdateType(t *testing.T) {
 		{ID: uuid.New().String(), MType: models.Counter, Delta: &cnt, Value: nil},
 	}
 
+	const prepareName string = "insert_metrics"
 	mock.ExpectBegin()
-	mock.ExpectPrepare(q)
-	mock.ExpectExec(q).WithArgs(expectedMetrics[0].ID, expectedMetrics[0].MType, expectedMetrics[0].Delta, *expectedMetrics[0].Value).WillReturnResult(
-		sqlmock.NewResult(1, 1))
-	mock.ExpectExec(q).WithArgs(expectedMetrics[1].ID, expectedMetrics[1].MType, *expectedMetrics[1].Delta, expectedMetrics[1].Value).WillReturnResult(
-		sqlmock.NewResult(2, 1))
+	mock.ExpectPrepare(prepareName, q)
+	mock.ExpectExec(prepareName).WithArgs(expectedMetrics[0].ID, expectedMetrics[0].MType, expectedMetrics[0].Delta, expectedMetrics[0].Value).WillReturnResult(
+		pgxmock.NewResult("1", 1))
+	mock.ExpectExec(prepareName).WithArgs(expectedMetrics[1].ID, expectedMetrics[1].MType, expectedMetrics[1].Delta, expectedMetrics[1].Value).WillReturnResult(
+		pgxmock.NewResult("2", 1))
 	mock.ExpectCommit()
 
-	errUpdate := rep.Updates(slog.Default(), expectedMetrics)
+	errUpdate := rep.Updates(t.Context(), slog.Default(), expectedMetrics)
 	assert.NoError(t, errUpdate)
 }
 
 func TestNegativeAllUpdateType(t *testing.T) {
-	db, mock, err := sqlmock.New()
+	mock, err := pgxmock.NewPool()
 	assert.NoError(t, err)
-	defer db.Close()
-	rep := DataBase{database: db}
+	defer mock.Close()
+
+	rep := DataBase{database: mock}
 
 	q := regexp.QuoteMeta(
 		`INSERT INTO metrics (name, metric_type, delta, value)
@@ -363,14 +402,15 @@ func TestNegativeAllUpdateType(t *testing.T) {
 	}
 
 	mock.ExpectBegin()
-	mock.ExpectPrepare(q)
-	mock.ExpectExec(q).WithArgs(expectedMetrics[0].ID, expectedMetrics[0].MType, expectedMetrics[0].Delta, *expectedMetrics[0].Value).WillReturnResult(
-		sqlmock.NewResult(1, 1))
-	mock.ExpectExec(q).WithArgs(expectedMetrics[1].ID, expectedMetrics[1].MType, *expectedMetrics[1].Delta, expectedMetrics[1].Value).WillReturnError(
+	const prepareName string = "insert_metrics"
+	mock.ExpectPrepare(prepareName, q)
+	mock.ExpectExec(prepareName).WithArgs(expectedMetrics[0].ID, expectedMetrics[0].MType, expectedMetrics[0].Delta, expectedMetrics[0].Value).WillReturnResult(
+		pgxmock.NewResult("1", 1))
+	mock.ExpectExec(prepareName).WithArgs(expectedMetrics[1].ID, expectedMetrics[1].MType, expectedMetrics[1].Delta, expectedMetrics[1].Value).WillReturnError(
 		fmt.Errorf("sql error"))
 	mock.ExpectRollback()
 
-	errUpdate := rep.Updates(slog.Default(), expectedMetrics)
+	errUpdate := rep.Updates(t.Context(), slog.Default(), expectedMetrics)
 	if assert.NotNil(t, errUpdate) {
 		assert.Contains(t, errUpdate.Error(), "sql error")
 	}

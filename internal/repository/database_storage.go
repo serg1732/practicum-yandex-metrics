@@ -2,32 +2,33 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
 )
 
-func BuildDataBase(log *slog.Logger, config *config.ServerConfig) (*DataBase, error) {
+func BuildDataBase(ctx context.Context, log *slog.Logger, config *config.ServerConfig) (*DataBase, error) {
 	if config.DSN == "" {
 		return nil, errors.New("DSL required")
 	}
-	db, err := sql.Open("postgres", config.DSN)
+	db, err := pgxpool.New(ctx, config.DSN)
 	if err != nil {
 		log.Error("Error opening database connection", "error", err)
 		return nil, err
 	}
-	if errPing := db.Ping(); errPing != nil {
+	if errPing := db.Ping(ctx); errPing != nil {
 		log.Error("Error pinging database connection", "error", errPing)
 		return nil, errPing
 	}
@@ -65,22 +66,22 @@ func MigrateDataBase(log *slog.Logger, config *config.ServerConfig) error {
 	return nil
 }
 
+type Pool interface {
+	Ping(ctx context.Context) error
+	BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error)
+	Close()
+}
+
 type DataBase struct {
-	database *sql.DB
+	database Pool
 }
 
-func (db *DataBase) Ping() error {
-	return db.database.Ping()
+func (db *DataBase) Ping(ctx context.Context) error {
+	return db.database.Ping(ctx)
 }
 
-func (db *DataBase) Update(log *slog.Logger, Data *models.Metrics) error {
-	ctx := context.Background()
-	return retry(ctx, func() error {
-		tx, errTx := db.database.Begin()
-		if errTx != nil {
-			return errTx
-		}
-		defer tx.Rollback()
+func (db *DataBase) Update(ctx context.Context, log *slog.Logger, Data *models.Metrics) error {
+	return db.retry(ctx, func(tx pgx.Tx) error {
 		query := `
 		INSERT INTO metrics (name, metric_type, delta, value)
 		VALUES ($1, $2, $3, $4)
@@ -98,24 +99,17 @@ func (db *DataBase) Update(log *slog.Logger, Data *models.Metrics) error {
 	  	END;
 		`
 
-		if _, err := db.database.ExecContext(context.TODO(), query, Data.ID, Data.MType, Data.Delta, Data.Value); err != nil {
+		if _, err := tx.Exec(ctx, query, Data.ID, Data.MType, Data.Delta, Data.Value); err != nil {
 			log.Error("Ошибка при добавлении в БД", "error", err)
 			return err
 		}
 		log.Debug("Добавлена / обновлена новая метрика", "id", Data.ID)
-		return tx.Commit()
+		return nil
 	})
 }
 
-func (db *DataBase) Updates(log *slog.Logger, Data []*models.Metrics) error {
-	ctx := context.Background()
-	return retry(ctx, func() error {
-		tx, err := db.database.Begin()
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-
+func (db *DataBase) Updates(ctx context.Context, log *slog.Logger, Data []*models.Metrics) error {
+	return db.retry(ctx, func(tx pgx.Tx) error {
 		query := `
 		INSERT INTO metrics (name, metric_type, delta, value)
 		VALUES ($1, $2, $3, $4)
@@ -132,81 +126,68 @@ func (db *DataBase) Updates(log *slog.Logger, Data []*models.Metrics) error {
 			ELSE metrics.value
 	  	END;
 		`
-
-		stmt, err := db.database.Prepare(query)
+		const preparedName string = "insert_metrics"
+		_, err := tx.Prepare(ctx, preparedName, query)
 		if err != nil {
 			return err
 		}
 
 		for _, metric := range Data {
-			_, errStmt := stmt.ExecContext(ctx, metric.ID, metric.MType, metric.Delta, metric.Value)
+			_, errStmt := tx.Exec(ctx, preparedName, metric.ID, metric.MType, metric.Delta, metric.Value)
 			if errStmt != nil {
 				return errStmt
 			}
 		}
 
 		log.Debug("Добавлены / обновлены новые метрики")
-		return tx.Commit()
+		return nil
 	})
 }
 
-func (db *DataBase) GetCounter(name string) (*models.Metrics, error) {
-	ctx := context.Background()
-	var row *sql.Row
-	errRetry := retry(ctx, func() error {
-		row = db.database.QueryRowContext(context.TODO(),
-			"SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Counter)
-		if row.Err() != nil {
-			return row.Err()
+func (db *DataBase) GetCounter(ctx context.Context, name string) (*models.Metrics, error) {
+	var row pgx.Row
+	var metrics models.Metrics
+	errRetry := db.retry(ctx, func(tx pgx.Tx) error {
+		row = tx.QueryRow(ctx, `SELECT name, metric_type, delta FROM metrics WHERE name = $1 AND metric_type = $2`, name, models.Counter)
+		if errScan := row.Scan(&metrics.ID, &metrics.MType, &metrics.Delta); errScan != nil {
+			return errScan
 		}
 		return nil
 	})
 	if errRetry != nil {
 		return nil, errRetry
 	}
-	var metrics models.Metrics
-	err := row.Scan(&metrics.ID, &metrics.MType, &metrics.Delta)
-	if err != nil {
-		return nil, err
-	}
 	return &metrics, nil
 }
-func (db *DataBase) GetGauge(name string) (*models.Metrics, error) {
-	ctx := context.Background()
-	var row *sql.Row
-	errRetry := retry(ctx, func() error {
-		row = db.database.QueryRowContext(context.TODO(),
-			"SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2", name, models.Gauge)
-		if row.Err() != nil {
-			return row.Err()
+func (db *DataBase) GetGauge(ctx context.Context, name string) (*models.Metrics, error) {
+	var row pgx.Row
+	var metrics models.Metrics
+	errRetry := db.retry(ctx, func(tx pgx.Tx) error {
+		row = tx.QueryRow(ctx, `SELECT name, metric_type, value FROM metrics WHERE name = $1 AND metric_type = $2`, name, models.Gauge)
+		if errScan := row.Scan(&metrics.ID, &metrics.MType, &metrics.Value); errScan != nil {
+			return errScan
 		}
 		return nil
 	})
 	if errRetry != nil {
 		return nil, errRetry
 	}
-	var metrics models.Metrics
-	err := row.Scan(&metrics.ID, &metrics.MType, &metrics.Value)
-	if err != nil {
-		return nil, err
-	}
+
 	return &metrics, nil
 }
-func (db *DataBase) GetAllCounters() (map[string]*models.Metrics, error) {
+func (db *DataBase) GetAllCounters(ctx context.Context) (map[string]*models.Metrics, error) {
 	counters := make(map[string]*models.Metrics)
-	ctx := context.Background()
-	var rows *sql.Rows
-	var err error
-	errRetry := retry(ctx, func() error {
-		rows, err = db.database.QueryContext(context.TODO(),
-			"SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1", models.Counter)
+	errRetry := db.retry(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			"SELECT name, metric_type, delta FROM metrics WHERE metric_type = $1", models.Counter,
+		)
 		if err != nil {
 			return err
 		}
+		defer rows.Close()
 		if rows.Err() != nil {
 			return err
 		}
-		defer rows.Close()
 		for rows.Next() {
 			var metrics models.Metrics
 			errScan := rows.Scan(&metrics.ID, &metrics.MType, &metrics.Delta)
@@ -219,21 +200,19 @@ func (db *DataBase) GetAllCounters() (map[string]*models.Metrics, error) {
 	})
 	return counters, errRetry
 }
-func (db *DataBase) GetAllGauges() (map[string]*models.Metrics, error) {
+func (db *DataBase) GetAllGauges(ctx context.Context) (map[string]*models.Metrics, error) {
 	gauges := make(map[string]*models.Metrics)
-	ctx := context.Background()
-	var rows *sql.Rows
-	var err error
-	errRetry := retry(ctx, func() error {
-		rows, err = db.database.QueryContext(context.TODO(),
-			"SELECT name, metric_type, value FROM metrics WHERE metric_type = $1", models.Gauge)
+	errRetry := db.retry(ctx, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			`SELECT name, metric_type, value FROM metrics WHERE metric_type = $1`, models.Gauge,
+		)
 		if err != nil {
 			return err
 		}
+		defer rows.Close()
 		if rows.Err() != nil {
 			return rows.Err()
 		}
-		defer rows.Close()
 		for rows.Next() {
 			var metrics models.Metrics
 			errScan := rows.Scan(&metrics.ID, &metrics.MType, &metrics.Value)
@@ -250,21 +229,33 @@ func (db *DataBase) GetAllGauges() (map[string]*models.Metrics, error) {
 	return gauges, nil
 }
 
-func retry(ctx context.Context, fn func() error) error {
+func (db *DataBase) retry(ctx context.Context, fn func(pgx.Tx) error) error {
 	const maxRetries = 3
 	delay := 1
 	classify := helpers.NewPostgresErrorClassifier()
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		err := fn()
-		if err == nil {
-			return nil
-		}
-
-		if classify.Classify(err) != helpers.Retriable {
+		tx, err := db.database.BeginTx(ctx, pgx.TxOptions{})
+		defer tx.Rollback(ctx)
+		if err != nil && classify.Classify(err) != helpers.Retriable {
 			return err
 		}
-		lastErr = err
+		errFn := fn(tx)
+		if errFn == nil {
+			if errCommit := tx.Commit(ctx); errCommit == nil {
+				return nil
+			} else {
+				if classify == nil || classify.Classify(errCommit) != helpers.Retriable {
+					return errCommit
+				}
+				lastErr = errCommit
+			}
+		} else {
+			if classify == nil || classify.Classify(errFn) != helpers.Retriable {
+				return errFn
+			}
+			lastErr = errFn
+		}
 
 		select {
 		case <-ctx.Done():

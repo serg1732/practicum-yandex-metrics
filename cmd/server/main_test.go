@@ -192,11 +192,11 @@ func TestAllReadServerHandler(t *testing.T) {
 		t.Run(td.name, func(t *testing.T) {
 			mockReadRepo.
 				EXPECT().
-				GetAllCounters().
+				GetAllCounters(gomock.Any()).
 				Return(td.expectedCounter, nil)
 			mockReadRepo.
 				EXPECT().
-				GetAllGauges().
+				GetAllGauges(gomock.Any()).
 				Return(td.expectedGauges, nil)
 			resp, err := http.DefaultClient.Get(srv.URL)
 			if err != nil {
@@ -280,11 +280,11 @@ func TestSelectReadServerHandler(t *testing.T) {
 		t.Run(td.name, func(t *testing.T) {
 			mockReadRepo.
 				EXPECT().
-				GetCounter(gomock.Eq(td.repoCounterKey)).
+				GetCounter(gomock.Any(), gomock.Eq(td.repoCounterKey)).
 				Return(td.repoCounterValue, nil).AnyTimes()
 			mockReadRepo.
 				EXPECT().
-				GetGauge(gomock.Eq(td.repoGaugesKey)).
+				GetGauge(gomock.Any(), gomock.Eq(td.repoGaugesKey)).
 				Return(td.repoGaugesValue, nil).AnyTimes()
 
 			resp, err := http.DefaultClient.Get(srv.URL + td.url)

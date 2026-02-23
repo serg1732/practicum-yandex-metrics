@@ -68,15 +68,15 @@ func (m *MemStorageRepository) runSaver(log *slog.Logger) {
 	}()
 }
 
-func (m *MemStorageRepository) GetAllCounters() (map[string]*models.Metrics, error) {
+func (m *MemStorageRepository) GetAllCounters(_ context.Context) (map[string]*models.Metrics, error) {
 	return m.MemStorage.CounterMap, nil
 }
 
-func (m *MemStorageRepository) GetAllGauges() (map[string]*models.Metrics, error) {
+func (m *MemStorageRepository) GetAllGauges(_ context.Context) (map[string]*models.Metrics, error) {
 	return m.MemStorage.GaugeMap, nil
 }
 
-func (m *MemStorageRepository) GetGauge(name string) (*models.Metrics, error) {
+func (m *MemStorageRepository) GetGauge(_ context.Context, name string) (*models.Metrics, error) {
 	val, isExist := m.MemStorage.GaugeMap[name]
 	if !isExist {
 		return nil, nil
@@ -84,7 +84,7 @@ func (m *MemStorageRepository) GetGauge(name string) (*models.Metrics, error) {
 	return val, nil
 }
 
-func (m *MemStorageRepository) Update(log *slog.Logger, Data *models.Metrics) error {
+func (m *MemStorageRepository) Update(_ context.Context, log *slog.Logger, Data *models.Metrics) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if Data.MType == models.Gauge {
@@ -108,16 +108,16 @@ func (m *MemStorageRepository) Update(log *slog.Logger, Data *models.Metrics) er
 	return nil
 }
 
-func (m *MemStorageRepository) Updates(log *slog.Logger, Data []*models.Metrics) error {
+func (m *MemStorageRepository) Updates(ctx context.Context, log *slog.Logger, Data []*models.Metrics) error {
 	for _, metric := range Data {
-		if err := m.Update(log, metric); err != nil {
+		if err := m.Update(ctx, log, metric); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (m *MemStorageRepository) GetCounter(name string) (*models.Metrics, error) {
+func (m *MemStorageRepository) GetCounter(_ context.Context, name string) (*models.Metrics, error) {
 	counter, isExist := m.MemStorage.CounterMap[name]
 	if !isExist {
 		return nil, nil

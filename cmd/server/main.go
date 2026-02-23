@@ -22,7 +22,6 @@ import (
 func main() {
 	log := logger.NewSlogLogger(slog.LevelInfo)
 	serverConfig, errConfig := config.GetSeverConfig()
-	log.Debug("Прочитан конфиг:", "config", serverConfig)
 	if errConfig != nil {
 		log.Error("Ошибка парсинга env значений", "error", errConfig)
 	}
@@ -33,16 +32,18 @@ func main() {
 	)
 	defer stop()
 
-	db, err := repository.BuildDataBase(log, serverConfig)
-	if err != nil {
-		log.Error("Ошибка подключения к БД", "error", err)
-	}
-
 	var mux *chi.Mux
-	if db != nil {
+	if serverConfig.DSN != "" {
+		db, err := repository.BuildDataBase(ctx, log, serverConfig)
+		if err != nil {
+			log.Error("Ошибка подключения к БД", "error", err)
+			os.Exit(1)
+		}
+
 		errMigrate := repository.MigrateDataBase(log, serverConfig)
 		if errMigrate != nil {
 			log.Error("Ошибка при миграции", "error", errMigrate)
+			os.Exit(1)
 		}
 		updaterHandler := handler.BuildUpdateHandler(db)
 		readHandlers := handler.BuildReadHandler(db)
@@ -52,7 +53,7 @@ func main() {
 		storage := repository.BuildMemStorage(ctx, log, serverConfig)
 		updaterHandler := handler.BuildUpdateHandler(storage)
 		readHandlers := handler.BuildReadHandler(storage)
-		mux = buildRouter(log, db, updaterHandler, readHandlers)
+		mux = buildRouter(log, nil, updaterHandler, readHandlers)
 	}
 
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)

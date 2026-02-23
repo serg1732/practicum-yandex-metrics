@@ -1,7 +1,7 @@
 -- migrations/000001_create_metrics_table.up.sql
 -- Создание таблицы метрик
 CREATE TABLE IF NOT EXISTS metrics (
-                         id SERIAL PRIMARY KEY,
+                         id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
                          name VARCHAR(255) NOT NULL,
                          metric_type VARCHAR(255) NOT NULL,
                          delta BIGINT,
