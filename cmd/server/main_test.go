@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -234,29 +235,34 @@ func TestSelectReadServerHandler(t *testing.T) {
 		repoCounterValue *models.Metrics
 		repoGaugesKey    string
 		repoGaugesValue  *models.Metrics
+		err              error
 	}{
 		{
 			name:           "test 1 not found",
 			url:            "/value/counter/test1",
 			expectedStatus: http.StatusNotFound,
 			repoCounterKey: "test1",
+			err:            repository.ErrorMetricNotFound,
 		},
 		{
 			name:           "test 2 not found",
 			url:            "/value/gauge/test2",
 			expectedStatus: http.StatusNotFound,
 			repoGaugesKey:  "test2",
+			err:            repository.ErrorMetricNotFound,
 		},
 		{
 			name:           "test 3 bad type",
 			url:            "/value/hunter/test",
 			expectedStatus: http.StatusNotFound,
+			err:            repository.ErrorMetricNotFound,
 		},
 		{
 			name:           "test 4",
 			url:            "/value/counter/test4",
 			expectedStatus: http.StatusOK,
 			repoCounterKey: "test4",
+			err:            nil,
 			repoCounterValue: &models.Metrics{
 				ID:    "test4",
 				MType: models.Counter,
@@ -268,6 +274,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 			url:            "/value/gauge/test5",
 			expectedStatus: http.StatusOK,
 			repoGaugesKey:  "test5",
+			err:            nil,
 			repoGaugesValue: &models.Metrics{
 				ID:    "test5",
 				MType: models.Gauge,
@@ -281,14 +288,14 @@ func TestSelectReadServerHandler(t *testing.T) {
 			mockReadRepo.
 				EXPECT().
 				GetCounter(gomock.Any(), gomock.Eq(td.repoCounterKey)).
-				Return(td.repoCounterValue, nil).AnyTimes()
+				Return(td.repoCounterValue, td.err).AnyTimes()
 			mockReadRepo.
 				EXPECT().
 				GetGauge(gomock.Any(), gomock.Eq(td.repoGaugesKey)).
-				Return(td.repoGaugesValue, nil).AnyTimes()
+				Return(td.repoGaugesValue, td.err).AnyTimes()
 
 			resp, err := http.DefaultClient.Get(srv.URL + td.url)
-			if err != nil {
+			if err != nil && !errors.Is(err, td.err) {
 				assert.Nil(t, err)
 			}
 			defer resp.Body.Close()

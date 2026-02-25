@@ -4,13 +4,13 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"text/template"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/serg1732/practicum-yandex-metrics/internal/helpers"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
@@ -77,34 +77,26 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(log *slog.Logger) http.Hand
 		if metricType == models.Counter {
 			val, errCounter := h.storage.GetCounter(r.Context(), metricName)
 			if errCounter != nil {
-				if helpers.IsConnectionError(errCounter) {
-					log.Error("Ошибка подключения к БД", "error", errCounter)
-					w.WriteHeader(http.StatusInternalServerError)
+				if errors.Is(errCounter, repository.ErrorMetricNotFound) {
+					log.Debug("Метрика не найдена", "name", metricName, "type", metricType)
+					w.WriteHeader(http.StatusNotFound)
 					return
 				}
-				log.Debug("Ошибка при получении метрики", "metric_type", metricType, "metric_name", metricName)
-				w.WriteHeader(http.StatusNotFound)
-				return
-			} else if val == nil {
-				log.Debug("Метрика не найдена", "metric_type", metricType, "metric_name", metricName)
-				w.WriteHeader(http.StatusNotFound)
+				log.Error("Ошибка при получении метрики", "metric_type", metricType, "metric_name", metricName)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			fmt.Fprintln(w, *val.Delta)
 		} else if metricType == models.Gauge {
 			val, errGauge := h.storage.GetGauge(r.Context(), metricName)
 			if errGauge != nil {
-				if helpers.IsConnectionError(errGauge) {
-					log.Error("Ошибка подключения к БД", "error", errGauge)
-					w.WriteHeader(http.StatusInternalServerError)
+				if errors.Is(errGauge, repository.ErrorMetricNotFound) {
+					log.Debug("Метрика не найдена", "name", metricName, "type", metricType)
+					w.WriteHeader(http.StatusNotFound)
 					return
 				}
-				log.Debug("Ошибка при получении метрики", "metric_type", metricType, "metric_name", metricName)
-				w.WriteHeader(http.StatusNotFound)
-				return
-			} else if val == nil {
-				log.Debug("Метрика не найдена", "name", metricName, "type", metricType)
-				w.WriteHeader(http.StatusNotFound)
+				log.Error("Ошибка при получении метрики", "metric_type", metricType, "metric_name", metricName)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			fmt.Fprintln(w, *val.Value)
@@ -133,13 +125,13 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 		if metric.MType == models.Counter {
 			val, errCounter := h.storage.GetCounter(r.Context(), metric.ID)
 			if errCounter != nil {
-				if helpers.IsConnectionError(errCounter) {
-					log.Error("Ошибка подключения к БД", "error", errCounter)
-					w.WriteHeader(http.StatusInternalServerError)
+				if errors.Is(errCounter, repository.ErrorMetricNotFound) {
+					log.Debug("Метрика не найдена", "name", metric.ID, "type", metric.MType)
+					w.WriteHeader(http.StatusNotFound)
 					return
 				}
-				log.Debug("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType, "error", errCounter)
-				w.WriteHeader(http.StatusNotFound)
+				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType, "error", errCounter)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			} else if val == nil {
 				log.Debug("Метрика не найдена", "name", metric.ID, "type", metric.MType)
@@ -156,13 +148,13 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 		} else if metric.MType == models.Gauge {
 			val, errGauge := h.storage.GetGauge(r.Context(), metric.ID)
 			if errGauge != nil {
-				if helpers.IsConnectionError(errGauge) {
-					log.Error("Ошибка подключения к БД", "error", errGauge)
-					w.WriteHeader(http.StatusInternalServerError)
+				if errors.Is(errGauge, repository.ErrorMetricNotFound) {
+					log.Debug("Метрика не найдена", "name", metric.ID, "type", metric.MType)
+					w.WriteHeader(http.StatusNotFound)
 					return
 				}
-				log.Debug("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType, "error", errGauge)
-				w.WriteHeader(http.StatusNotFound)
+				log.Error("Ошибка при получении метрики", "name", metric.ID, "type", metric.MType, "error", errGauge)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			} else if val == nil {
 				log.Debug("Метрика не найдена", "name", metric.ID, "type", metric.MType)

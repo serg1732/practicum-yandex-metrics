@@ -15,6 +15,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler/mocks"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
+	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -121,6 +122,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 	testData := []struct {
 		name             string
 		url              string
+		err              error
 		expectedStatus   int
 		repoCounterKey   string
 		repoCounterValue *models.Metrics
@@ -132,17 +134,20 @@ func TestSelectReadServerHandler(t *testing.T) {
 			url:            "/value/counter/test1",
 			expectedStatus: http.StatusNotFound,
 			repoCounterKey: "test1",
+			err:            repository.ErrorMetricNotFound,
 		},
 		{
 			name:           "test 2 not found",
 			url:            "/value/gauge/test2",
 			expectedStatus: http.StatusNotFound,
 			repoGaugesKey:  "test2",
+			err:            repository.ErrorMetricNotFound,
 		},
 		{
 			name:           "test 3 bad type",
 			url:            "/value/hunter/test",
 			expectedStatus: http.StatusNotFound,
+			err:            repository.ErrorMetricNotFound,
 		},
 		{
 			name:           "test 4 success counter",
@@ -173,11 +178,11 @@ func TestSelectReadServerHandler(t *testing.T) {
 			mockRepo.
 				EXPECT().
 				GetCounter(gomock.Any(), gomock.Eq(td.repoCounterKey)).
-				Return(td.repoCounterValue, nil).AnyTimes()
+				Return(td.repoCounterValue, td.err).AnyTimes()
 			mockRepo.
 				EXPECT().
 				GetGauge(gomock.Any(), gomock.Eq(td.repoGaugesKey)).
-				Return(td.repoGaugesValue, nil).AnyTimes()
+				Return(td.repoGaugesValue, td.err).AnyTimes()
 
 			r := chi.NewRouter()
 			r.HandleFunc("GET /value/{metricType}/{metricName}", handlerBuilder.SelectMetricHandler(slog.Default()))

@@ -154,6 +154,11 @@ func (db *DataBase) GetCounter(ctx context.Context, name string) (*models.Metric
 		}
 		return nil
 	})
+
+	if errors.Is(errRetry, pgx.ErrNoRows) {
+		return nil, ErrorMetricNotFound
+	}
+
 	if errRetry != nil {
 		return nil, errRetry
 	}
@@ -169,6 +174,11 @@ func (db *DataBase) GetGauge(ctx context.Context, name string) (*models.Metrics,
 		}
 		return nil
 	})
+
+	if errors.Is(errRetry, pgx.ErrNoRows) {
+		return nil, ErrorMetricNotFound
+	}
+
 	if errRetry != nil {
 		return nil, errRetry
 	}

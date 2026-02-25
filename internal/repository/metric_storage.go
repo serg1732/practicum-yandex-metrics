@@ -79,7 +79,7 @@ func (m *MemStorageRepository) GetAllGauges(_ context.Context) (map[string]*mode
 func (m *MemStorageRepository) GetGauge(_ context.Context, name string) (*models.Metrics, error) {
 	val, isExist := m.MemStorage.GaugeMap[name]
 	if !isExist {
-		return nil, nil
+		return nil, ErrorMetricNotFound
 	}
 	return val, nil
 }
@@ -120,7 +120,7 @@ func (m *MemStorageRepository) Updates(ctx context.Context, log *slog.Logger, Da
 func (m *MemStorageRepository) GetCounter(_ context.Context, name string) (*models.Metrics, error) {
 	counter, isExist := m.MemStorage.CounterMap[name]
 	if !isExist {
-		return nil, nil
+		return nil, ErrorMetricNotFound
 	}
 	return counter, nil
 }
