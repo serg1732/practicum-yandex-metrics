@@ -5,6 +5,7 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -35,59 +36,61 @@ func (m *MockReadStorage) EXPECT() *MockReadStorageMockRecorder {
 }
 
 // GetAllCounters mocks base method.
-func (m *MockReadStorage) GetAllCounters() map[string]*models.Metrics {
+func (m *MockReadStorage) GetAllCounters(ctx context.Context) (map[string]*models.Metrics, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllCounters")
+	ret := m.ctrl.Call(m, "GetAllCounters", ctx)
 	ret0, _ := ret[0].(map[string]*models.Metrics)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetAllCounters indicates an expected call of GetAllCounters.
-func (mr *MockReadStorageMockRecorder) GetAllCounters() *gomock.Call {
+func (mr *MockReadStorageMockRecorder) GetAllCounters(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllCounters", reflect.TypeOf((*MockReadStorage)(nil).GetAllCounters))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllCounters", reflect.TypeOf((*MockReadStorage)(nil).GetAllCounters), ctx)
 }
 
 // GetAllGauges mocks base method.
-func (m *MockReadStorage) GetAllGauges() map[string]*models.Metrics {
+func (m *MockReadStorage) GetAllGauges(ctx context.Context) (map[string]*models.Metrics, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllGauges")
+	ret := m.ctrl.Call(m, "GetAllGauges", ctx)
 	ret0, _ := ret[0].(map[string]*models.Metrics)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetAllGauges indicates an expected call of GetAllGauges.
-func (mr *MockReadStorageMockRecorder) GetAllGauges() *gomock.Call {
+func (mr *MockReadStorageMockRecorder) GetAllGauges(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllGauges", reflect.TypeOf((*MockReadStorage)(nil).GetAllGauges))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllGauges", reflect.TypeOf((*MockReadStorage)(nil).GetAllGauges), ctx)
 }
 
 // GetCounter mocks base method.
-func (m *MockReadStorage) GetCounter(name string) (*models.Metrics, bool) {
+func (m *MockReadStorage) GetCounter(ctx context.Context, name string) (*models.Metrics, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCounter", name)
+	ret := m.ctrl.Call(m, "GetCounter", ctx, name)
 	ret0, _ := ret[0].(*models.Metrics)
-	ret1, _ := ret[1].(bool)
+	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCounter indicates an expected call of GetCounter.
-func (mr *MockReadStorageMockRecorder) GetCounter(name interface{}) *gomock.Call {
+func (mr *MockReadStorageMockRecorder) GetCounter(ctx, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCounter", reflect.TypeOf((*MockReadStorage)(nil).GetCounter), name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCounter", reflect.TypeOf((*MockReadStorage)(nil).GetCounter), ctx, name)
 }
 
 // GetGauge mocks base method.
-func (m *MockReadStorage) GetGauge(name string) (*models.Metrics, bool) {
+func (m *MockReadStorage) GetGauge(ctx context.Context, name string) (*models.Metrics, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetGauge", name)
+	ret := m.ctrl.Call(m, "GetGauge", ctx, name)
 	ret0, _ := ret[0].(*models.Metrics)
-	ret1, _ := ret[1].(bool)
+	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetGauge indicates an expected call of GetGauge.
-func (mr *MockReadStorageMockRecorder) GetGauge(name interface{}) *gomock.Call {
+func (mr *MockReadStorageMockRecorder) GetGauge(ctx, name interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGauge", reflect.TypeOf((*MockReadStorage)(nil).GetGauge), name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGauge", reflect.TypeOf((*MockReadStorage)(nil).GetGauge), ctx, name)
 }

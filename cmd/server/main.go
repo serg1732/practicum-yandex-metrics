@@ -31,10 +31,31 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
-	storage := repository.BuildMemStorage(ctx, log, serverConfig)
-	updaterHandler := handler.BuildUpdateHandler(storage)
-	readHandlers := handler.BuildReadHandler(storage)
-	mux := buildRouter(log, updaterHandler, readHandlers)
+
+	var mux *chi.Mux
+	if serverConfig.DSN != "" {
+		db, err := repository.BuildDataBase(ctx, log, serverConfig)
+		if err != nil {
+			log.Error("Ошибка подключения к БД", "error", err)
+			os.Exit(1)
+		}
+
+		errMigrate := repository.MigrateDataBase(log, serverConfig)
+		if errMigrate != nil {
+			log.Error("Ошибка при миграции", "error", errMigrate)
+			os.Exit(1)
+		}
+		updaterHandler := handler.BuildUpdateHandler(db)
+		readHandlers := handler.BuildReadHandler(db)
+		mux = buildRouter(log, db, updaterHandler, readHandlers)
+
+	} else {
+		storage := repository.BuildMemStorage(ctx, log, serverConfig)
+		updaterHandler := handler.BuildUpdateHandler(storage)
+		readHandlers := handler.BuildReadHandler(storage)
+		mux = buildRouter(log, nil, updaterHandler, readHandlers)
+	}
+
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
 	srv := &http.Server{
 		Addr:    serverConfig.RunAddr,
@@ -58,7 +79,7 @@ func main() {
 	}
 }
 
-func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandlerImpl, readHandlers handler.ReadMetricsHandlerImpl) *chi.Mux {
+func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handler.UpdateHandlerImpl, readHandlers handler.ReadMetricsHandlerImpl) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +89,11 @@ func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandlerImpl, rea
 	})
 	router.Use(logger.WithLogger(log))
 	router.Use(handler.WithGzipCompress(log))
+
+	router.Route("/updates", func(r chi.Router) {
+		r.Post("/", updateHandlers.UpdateValues(log))
+	})
+
 	router.Route("/update", func(r chi.Router) {
 		r.Post("/", updateHandlers.UpdateJSONHandler(log))
 		r.Post("/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdatePathValuesHandler(log))
@@ -77,7 +103,7 @@ func buildRouter(log *slog.Logger, updateHandlers handler.UpdateHandlerImpl, rea
 		r.Post("/", readHandlers.SelectValueMetricHandler(log))
 		r.Get("/{metricType}/{metricName}", readHandlers.SelectMetricHandler(log))
 	})
-
+	router.Get("/ping", readHandlers.PingDatabase(log, db))
 	router.Get("/", readHandlers.AllMetricsHandler(log))
 	return router
 }

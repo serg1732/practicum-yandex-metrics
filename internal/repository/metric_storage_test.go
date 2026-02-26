@@ -20,43 +20,41 @@ func TestUpdateGauge(t *testing.T) {
 		})
 
 	testData := []struct {
-		name          string
-		gauge         *models.Metrics
-		expectedExist bool
+		name  string
+		gauge *models.Metrics
 	}{
 		{
-			name:          "test1",
-			gauge:         &models.Metrics{ID: "test1", MType: models.Gauge, Value: nil},
-			expectedExist: true,
+			name:  "test1",
+			gauge: &models.Metrics{ID: "test1", MType: models.Gauge, Value: nil},
 		},
 		{
-			name:          "test2",
-			gauge:         &models.Metrics{ID: "test2", MType: models.Gauge, Value: new(float64)},
-			expectedExist: true,
+			name:  "test2",
+			gauge: &models.Metrics{ID: "test2", MType: models.Gauge, Value: new(float64)},
 		},
 		{
 			name: "test3",
 			gauge: &models.Metrics{ID: "test3", MType: models.Gauge, Value: func(f float64) *float64 {
 				return &f
 			}(3.14)},
-			expectedExist: true,
 		},
 		{
 			name: "test4",
 			gauge: &models.Metrics{ID: "test4", MType: models.Gauge, Value: func(f float64) *float64 {
 				return &f
 			}(3.14)},
-			expectedExist: true,
 		},
 	}
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			memStorage.Update(slog.Default(), data.name, data.gauge)
-			val, isExist := memStorage.GetGauge(data.name)
+			errUpdate := memStorage.Update(t.Context(), slog.Default(), data.gauge)
+			val, err := memStorage.GetGauge(t.Context(), data.name)
 
-			assert.Equal(t, data.expectedExist, isExist)
-			assert.Equal(t, data.gauge, val)
+			assert.Nil(t, err)
+			assert.Nil(t, errUpdate)
+			if assert.NotNil(t, data.gauge) {
+				assert.Equal(t, data.gauge, val)
+			}
 		})
 	}
 }
@@ -71,43 +69,40 @@ func TestUpdateCounter(t *testing.T) {
 		})
 
 	testData := []struct {
-		name          string
-		counter       *models.Metrics
-		expectedExist bool
+		name    string
+		counter *models.Metrics
 	}{
 		{
-			name:          "test1",
-			counter:       &models.Metrics{ID: "test1", MType: models.Counter, Delta: nil},
-			expectedExist: true,
+			name:    "test1",
+			counter: &models.Metrics{ID: "test1", MType: models.Counter, Delta: nil},
 		},
 		{
-			name:          "test2",
-			counter:       &models.Metrics{ID: "test2", MType: models.Counter, Delta: new(int64)},
-			expectedExist: true,
+			name:    "test2",
+			counter: &models.Metrics{ID: "test2", MType: models.Counter, Delta: new(int64)},
 		},
 		{
 			name: "test3",
 			counter: &models.Metrics{ID: "test3", MType: models.Counter, Delta: func(f int64) *int64 {
 				return &f
 			}(314)},
-			expectedExist: true,
 		},
 		{
 			name: "test4",
 			counter: &models.Metrics{ID: "test4", MType: models.Counter, Delta: func(f int64) *int64 {
 				return &f
 			}(-314)},
-			expectedExist: true,
 		},
 	}
 
 	for _, data := range testData {
 		t.Run(data.name, func(t *testing.T) {
-			memStorage.Update(slog.Default(), data.name, data.counter)
-			val, isExist := memStorage.GetCounter(data.name)
-
-			assert.Equal(t, data.expectedExist, isExist)
-			assert.Equal(t, data.counter, val)
+			errUpdate := memStorage.Update(t.Context(), slog.Default(), data.counter)
+			val, err := memStorage.GetCounter(t.Context(), data.name)
+			assert.Nil(t, err)
+			assert.Nil(t, errUpdate)
+			if assert.NotNil(t, data.counter) {
+				assert.Equal(t, data.counter, val)
+			}
 		})
 	}
 }

@@ -5,6 +5,7 @@
 package mocks
 
 import (
+	context "context"
 	slog "log/slog"
 	reflect "reflect"
 
@@ -36,13 +37,29 @@ func (m *MockUpdateStorage) EXPECT() *MockUpdateStorageMockRecorder {
 }
 
 // Update mocks base method.
-func (m *MockUpdateStorage) Update(log *slog.Logger, name string, Data *models.Metrics) {
+func (m *MockUpdateStorage) Update(ctx context.Context, log *slog.Logger, Data *models.Metrics) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Update", log, name, Data)
+	ret := m.ctrl.Call(m, "Update", ctx, log, Data)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockUpdateStorageMockRecorder) Update(log, name, Data interface{}) *gomock.Call {
+func (mr *MockUpdateStorageMockRecorder) Update(ctx, log, Data interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockUpdateStorage)(nil).Update), log, name, Data)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockUpdateStorage)(nil).Update), ctx, log, Data)
+}
+
+// Updates mocks base method.
+func (m *MockUpdateStorage) Updates(ctx context.Context, log *slog.Logger, Data []*models.Metrics) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Updates", ctx, log, Data)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Updates indicates an expected call of Updates.
+func (mr *MockUpdateStorageMockRecorder) Updates(ctx, log, Data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Updates", reflect.TypeOf((*MockUpdateStorage)(nil).Updates), ctx, log, Data)
 }

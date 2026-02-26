@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type (
@@ -31,19 +33,22 @@ func WithLogger(log *slog.Logger) func(http.Handler) http.Handler {
 				ResponseWriter: w,
 				responseData:   responseData,
 			}
+
 			h.ServeHTTP(&lw, r)
 
 			duration := time.Since(start)
-
+			requestID := uuid.New().String()
 			log.With(
+				slog.String("request_id", requestID),
 				slog.String("URI", r.RequestURI),
 				slog.String("method", r.Method),
-				slog.Duration("duration", duration),
 			).Info("Получен запрос")
 
 			log.With(
+				slog.String("request_id", requestID),
 				slog.Int("status", responseData.status),
 				slog.Int("size", responseData.size),
+				slog.Duration("duration", duration),
 			).Info("Ответ на запрос")
 		}
 		return http.HandlerFunc(logFn)

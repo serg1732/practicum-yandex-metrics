@@ -29,6 +29,7 @@ type CollectorImpl struct {
 	lastUpdateMetrics map[string]float64
 	updaterClient     repository.UpdaterClient
 	mutex             sync.Mutex
+	isNotSupportBatch bool
 }
 
 func (c *CollectorImpl) Run(log *slog.Logger, agentConfig config.AgentConfig) error {
@@ -41,9 +42,17 @@ func (c *CollectorImpl) Run(log *slog.Logger, agentConfig config.AgentConfig) er
 		c.lastUpdateMetrics = metrics
 		ticks += agentConfig.PollInterval
 		if ticks%limit == 0 {
-			err := c.updaterClient.ExternalUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics)
-			if err != nil {
-				log.Error("Ошибка при обновлении метрик ", "error", err)
+			if !c.isNotSupportBatch {
+				if err := c.updaterClient.ExternalBatchUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics); err != nil {
+					log.Error("API не поддерживает /updates/")
+					c.isNotSupportBatch = true
+				}
+			}
+			if c.isNotSupportBatch {
+				err := c.updaterClient.ExternalUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics)
+				if err != nil {
+					log.Error("Ошибка при обновлении метрик ", "error", err)
+				}
 			}
 			c.updateCounter = 0
 		}
