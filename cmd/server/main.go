@@ -47,13 +47,13 @@ func main() {
 		}
 		updaterHandler := handler.BuildUpdateHandler(db)
 		readHandlers := handler.BuildReadHandler(db)
-		mux = buildRouter(log, db, updaterHandler, readHandlers)
+		mux = buildRouter(log, db, updaterHandler, readHandlers, serverConfig.Key)
 
 	} else {
 		storage := repository.BuildMemStorage(ctx, log, serverConfig)
 		updaterHandler := handler.BuildUpdateHandler(storage)
 		readHandlers := handler.BuildReadHandler(storage)
-		mux = buildRouter(log, nil, updaterHandler, readHandlers)
+		mux = buildRouter(log, nil, updaterHandler, readHandlers, serverConfig.Key)
 	}
 
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
@@ -79,7 +79,8 @@ func main() {
 	}
 }
 
-func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handler.UpdateHandlerImpl, readHandlers handler.ReadMetricsHandlerImpl) *chi.Mux {
+func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handler.UpdateHandlerImpl,
+	readHandlers handler.ReadMetricsHandlerImpl, key string) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -88,6 +89,7 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 		})
 	})
 	router.Use(logger.WithLogger(log))
+	router.Use(handler.WithCheckHash(log, key))
 	router.Use(handler.WithGzipCompress(log))
 
 	router.Route("/updates", func(r chi.Router) {

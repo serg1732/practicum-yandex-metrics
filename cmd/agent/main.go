@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	log := logger.NewSlogLogger(slog.LevelInfo)
+	log := logger.NewSlogLogger(slog.LevelDebug)
 	agentConfig, errConfig := config.GetAgentConfig()
 
 	if errConfig != nil {

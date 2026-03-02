@@ -43,13 +43,16 @@ func (c *CollectorImpl) Run(log *slog.Logger, agentConfig config.AgentConfig) er
 		ticks += agentConfig.PollInterval
 		if ticks%limit == 0 {
 			if !c.isNotSupportBatch {
-				if err := c.updaterClient.ExternalBatchUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics); err != nil {
+				if err := c.updaterClient.ExternalBatchUpdateJSONMetrics(
+					log, c.updateCounter, c.lastUpdateMetrics, agentConfig.Key); err != nil {
 					log.Error("API не поддерживает /updates/")
 					c.isNotSupportBatch = true
 				}
 			}
 			if c.isNotSupportBatch {
-				err := c.updaterClient.ExternalUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics)
+				err := c.updaterClient.ExternalUpdateJSONMetrics(
+					log, c.updateCounter, c.lastUpdateMetrics, agentConfig.Key,
+				)
 				if err != nil {
 					log.Error("Ошибка при обновлении метрик ", "error", err)
 				}
