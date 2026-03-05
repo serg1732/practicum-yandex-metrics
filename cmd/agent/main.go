@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	log := logger.NewSlogLogger(slog.LevelDebug)
+	log := logger.NewSlogLogger(slog.LevelInfo)
 	agentConfig, errConfig := config.GetAgentConfig()
 
 	if errConfig != nil {
@@ -19,7 +19,7 @@ func main() {
 	}
 	log.Debug("Значения после чтения flags/env", "config", agentConfig)
 
-	agent := service.BuildCollector(*agentConfig)
+	agent := service.BuildCollector()
 	if err := agent.Run(log, *agentConfig); err != nil {
 		log.Error("Ошибка сборщика метрика", "error", err.Error())
 		os.Exit(1)

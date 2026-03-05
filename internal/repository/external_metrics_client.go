@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,6 +21,7 @@ type UpdaterClient interface {
 	ExternalUpdateMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error
 	ExternalUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64, key string) error
 	ExternalBatchUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64, key string) error
+	ExternalUpdateMetric(ctx context.Context, log *slog.Logger, key string, metric *models.Metrics) error
 }
 
 type RestyUpdaterClient struct {
@@ -158,6 +160,44 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(
 			slog.Int64("value", updateCounter),
 			slog.Any("error", err))
 		return errors.New("ошибка отправки метрики counter")
+	}
+	return nil
+}
+
+func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.Logger, key string, metric *models.Metrics) error {
+	urlModified := fmt.Sprintf("%s/update/", r.host)
+	jsonMetric, err := json.Marshal(metric)
+	if err != nil {
+		return errors.New("ошибка конвертации метрики gauge в json")
+	}
+
+	gzipMetric, err := gzipBody(jsonMetric)
+	if err != nil {
+		return errors.New("ошибка сжатия (gzip) метрики")
+	}
+
+	hash, errHash := getHash(gzipMetric, key)
+	if errHash != nil {
+		log.Error("Ошибка при получении hash значения", "error", errHash)
+		return errHash
+	}
+
+	resp, err := r.httpClient.R().
+		SetContext(ctx).
+		SetHeader("Content-Encoding", "gzip").
+		SetHeader("Content-Type", "application/json").
+		SetHeader("HashSHA256", hash).
+		SetBody(gzipMetric).
+		Post(urlModified)
+	if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
+		log.Debug("Ошибка обновления метрик gauge",
+			slog.String("name", metric.ID),
+			slog.String("type", metric.MType),
+			slog.Any("value", metric.Value),
+			slog.Any("delta", metric.Delta),
+			slog.Any("error", err),
+		)
+		return errors.New("ошибка отправки метрики gauge")
 	}
 	return nil
 }
