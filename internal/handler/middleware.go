@@ -63,7 +63,9 @@ func WithCheckHash(log *slog.Logger, key string) func(http.Handler) http.Handler
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				log.Error("Ошиюбка чтения body", "error", err.Error())
+				log.Error("Ошибка чтения body", "error", err.Error())
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+				return
 			}
 			r.Body = io.NopCloser(bytes.NewBuffer(body))
 			hash, errHash := getHash(body, key)

@@ -59,7 +59,8 @@ func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounte
 }
 
 func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(
-	log *slog.Logger, updateCounter int64, metrics map[string]float64, key string) error {
+	log *slog.Logger, updateCounter int64, metrics map[string]float64, key string,
+) error {
 	modelMetrics := make([]*models.Metrics, 0, len(metrics)+1)
 	for k, v := range metrics {
 		modelMetrics = append(modelMetrics, &models.Metrics{ID: k, MType: models.Gauge, Value: &v})
@@ -173,7 +174,8 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 
 	gzipMetric, err := gzipBody(jsonMetric)
 	if err != nil {
-		return errors.New("ошибка сжатия (gzip) метрики")
+		log.Error("ошибка сжатия (gzip) метрики", "error", err)
+		return err
 	}
 
 	hash, errHash := getHash(gzipMetric, key)

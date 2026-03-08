@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -17,8 +19,8 @@ import (
 )
 
 type Collector interface {
-	Run(log *slog.Logger, agentConfig config.AgentConfig) error
-	UpdateMetrics(ctx context.Context, log *slog.Logger, metrics <-chan map[string]*models.Metrics)
+	Run(ctx context.Context, log *slog.Logger, agentConfig config.AgentConfig) error
+	UpdateMetrics(log *slog.Logger, metrics map[string]*models.Metrics)
 }
 
 func BuildCollector() Collector {
@@ -35,42 +37,48 @@ type CollectorImpl struct {
 	isNotSupportBatch bool
 }
 
-func (c *CollectorImpl) Run(log *slog.Logger, agentConfig config.AgentConfig) error {
+func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig config.AgentConfig) error {
 	log.Info("Запуск сборщика метрик")
 	ticks := 0
 	c.updateCounter.Store(0)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	limit := agentConfig.ReportInterval + agentConfig.PollInterval
-	chUpdate := make(chan *models.Metrics, 40)
-	chStartUpdate := make(chan struct{})
-	chMetricsToSave := make(chan map[string]*models.Metrics, 5)
 
-	go updaterOtherMetric(ctx, log, chStartUpdate, chMetricsToSave)
-	go c.UpdateMetrics(ctx, log, chMetricsToSave)
+	chMetricsToSave := make(chan map[string]*models.Metrics)
+	go updater(ctx, log, agentConfig, chMetricsToSave, getRuntimeMetrics)
+	go updater(ctx, log, agentConfig, chMetricsToSave, getAdditionalMetrics)
 
+	chUpdate := make(chan *models.Metrics, agentConfig.RateLimit)
 	for i := 0; i < agentConfig.RateLimit; i++ {
 		go worker(ctx, log, chUpdate, repository.BuildRestyUpdaterMetric("http://"+agentConfig.RemoteAddr), agentConfig.Key)
 	}
-	for {
-		chMetricsToSave <- getRuntimeMetrics()
-		chStartUpdate <- struct{}{}
-		ticks += agentConfig.PollInterval
-		if ticks%limit == 0 {
-			c.mutex.RLock()
-			for _, metric := range c.lastUpdateMetrics {
-				chUpdate <- metric
-			}
-			c.mutex.RUnlock()
+	ticker := time.NewTicker(time.Duration(agentConfig.PollInterval) * time.Second)
+	defer ticker.Stop()
 
-			chUpdate <- &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: getPointer(c.updateCounter.Swap(0))}
+	for {
+		select {
+		case <-ctx.Done():
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				return ctx.Err()
+			}
+			return nil
+		case data := <-chMetricsToSave:
+			c.UpdateMetrics(log, data)
+		case <-ticker.C:
+			ticks += agentConfig.PollInterval
+			if ticks%agentConfig.ReportInterval == 0 {
+				c.mutex.RLock()
+				for _, metric := range c.lastUpdateMetrics {
+					chUpdate <- metric
+				}
+				c.mutex.RUnlock()
+
+				chUpdate <- &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: getPointer(c.updateCounter.Swap(0))}
+			}
+			ticks %= agentConfig.ReportInterval
 		}
-		ticks %= limit
-		time.Sleep(time.Duration(agentConfig.PollInterval) * time.Second)
 	}
 }
 
-func getRuntimeMetrics() map[string]*models.Metrics {
+func getRuntimeMetrics() (map[string]*models.Metrics, error) {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 
@@ -105,53 +113,60 @@ func getRuntimeMetrics() map[string]*models.Metrics {
 		"RandomValue":   {ID: "RandomValue", MType: models.Gauge, Value: getPointer(rand.Float64())},
 	}
 
-	return metrics
+	return metrics, nil
 }
 
-func (c *CollectorImpl) UpdateMetrics(ctx context.Context, log *slog.Logger, metrics <-chan map[string]*models.Metrics) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case data := <-metrics:
-			c.mutex.Lock()
-			for k, v := range data {
-				if metric, ok := c.lastUpdateMetrics[k]; ok {
-					if metric != v {
-						c.updateCounter.Add(1)
-					}
-				} else {
-					c.updateCounter.Add(1)
-				}
-				c.lastUpdateMetrics[k] = v
+func getAdditionalMetrics() (map[string]*models.Metrics, error) {
+	v, errMemory := mem.VirtualMemory()
+	if errMemory != nil {
+		return nil, errMemory
+	}
+	percent, errCPU := cpu.Percent(time.Second, false)
+	if errCPU != nil {
+		return nil, errMemory
+	}
+
+	metrics := map[string]*models.Metrics{
+		"TotalMemory":     {ID: "TotalMemory", MType: models.Gauge, Value: getPointer(float64(v.Total))},
+		"FreeMemory":      {ID: "FreeMemory", MType: models.Gauge, Value: getPointer(float64(v.Free))},
+		"CPUutilization1": {ID: "CPUutilization1", MType: models.Gauge, Value: getPointer(percent[0])},
+	}
+	return metrics, nil
+}
+
+func (c *CollectorImpl) UpdateMetrics(log *slog.Logger, metrics map[string]*models.Metrics) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	for k, v := range metrics {
+		if metric, ok := c.lastUpdateMetrics[k]; ok {
+			if metric != v {
+				c.updateCounter.Add(1)
 			}
-			c.mutex.Unlock()
+		} else {
+			c.updateCounter.Add(1)
 		}
+		c.lastUpdateMetrics[k] = v
+		log.Debug("успешно обновлены метрики")
 	}
 }
 
-func updaterOtherMetric(ctx context.Context, log *slog.Logger, startUpdate chan struct{},
-	result chan<- map[string]*models.Metrics) {
+func updater(ctx context.Context, log *slog.Logger, config config.AgentConfig,
+	metrics chan<- map[string]*models.Metrics, getMetricsFunc func() (map[string]*models.Metrics, error)) {
+	ticker := time.NewTicker(time.Duration(config.PollInterval) * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
+			log.Debug("завершение работы горутины с обновлением дополнительных метрик")
 			return
-		case <-startUpdate:
-			v, errMemory := mem.VirtualMemory()
-			if errMemory != nil {
-				log.Error("ошибка при получении метрик памяти", "error", errMemory)
+		case <-ticker.C:
+			data, err := getMetricsFunc()
+			if err != nil {
+				log.Error("ошибка получения метрик", "error", err)
+				os.Exit(1)
 			}
-			percent, errCPU := cpu.Percent(time.Second, false)
-			if errCPU != nil {
-				log.Error("ошибка при получении метрик CPU", "error", errCPU)
-			}
-
-			metrics := map[string]*models.Metrics{
-				"TotalMemory":     {ID: "TotalMemory", MType: models.Gauge, Value: getPointer(float64(v.Total))},
-				"FreeMemory":      {ID: "FreeMemory", MType: models.Gauge, Value: getPointer(float64(v.Free))},
-				"CPUutilization1": {ID: "CPUutilization1", MType: models.Gauge, Value: getPointer(percent[0])},
-			}
-			result <- metrics
+			metrics <- data
 		}
 	}
 }

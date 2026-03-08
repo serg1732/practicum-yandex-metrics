@@ -7,6 +7,13 @@ import (
 )
 
 func TestGetRuntimeMetrics(t *testing.T) {
-	metrics := getRuntimeMetrics()
+	metrics, err := getRuntimeMetrics()
 	assert.NotEmpty(t, metrics)
+	assert.NoError(t, err)
+}
+
+func TestGetAdditionalRuntimeMetrics(t *testing.T) {
+	metrics, err := getAdditionalMetrics()
+	assert.NotEmpty(t, metrics)
+	assert.NoError(t, err)
 }
