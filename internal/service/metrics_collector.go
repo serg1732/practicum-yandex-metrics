@@ -1,116 +1,192 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"math/rand"
+	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
+	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type Collector interface {
-	Run(log *slog.Logger, agentConfig config.AgentConfig) error
-	UpdateMetrics(metrics map[string]float64) int64
+	Run(ctx context.Context, log *slog.Logger, agentConfig config.AgentConfig) error
+	UpdateMetrics(log *slog.Logger, metrics map[string]*models.Metrics)
 }
 
-func BuildCollector(agentConfig config.AgentConfig) Collector {
+func BuildCollector() Collector {
 	return &CollectorImpl{
-		updateCounter:     0,
-		lastUpdateMetrics: make(map[string]float64),
-		updaterClient:     repository.BuildRestyUpdaterMetric("http://" + agentConfig.RemoteAddr),
+		updateCounter:     atomic.Int64{},
+		lastUpdateMetrics: make(map[string]*models.Metrics),
 	}
 }
 
 type CollectorImpl struct {
-	updateCounter     int64
-	lastUpdateMetrics map[string]float64
-	updaterClient     repository.UpdaterClient
-	mutex             sync.Mutex
+	updateCounter     atomic.Int64
+	lastUpdateMetrics map[string]*models.Metrics
+	mutex             sync.RWMutex
 	isNotSupportBatch bool
 }
 
-func (c *CollectorImpl) Run(log *slog.Logger, agentConfig config.AgentConfig) error {
+func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig config.AgentConfig) error {
 	log.Info("Запуск сборщика метрик")
 	ticks := 0
-	limit := agentConfig.ReportInterval + agentConfig.PollInterval
+	c.updateCounter.Store(0)
+
+	chMetricsToSave := make(chan map[string]*models.Metrics)
+	go updater(ctx, log, agentConfig, chMetricsToSave, getRuntimeMetrics)
+	go updater(ctx, log, agentConfig, chMetricsToSave, getAdditionalMetrics)
+
+	chUpdate := make(chan *models.Metrics, agentConfig.RateLimit)
+	for i := 0; i < agentConfig.RateLimit; i++ {
+		go worker(ctx, log, chUpdate, repository.BuildRestyUpdaterMetric("http://"+agentConfig.RemoteAddr), agentConfig.Key)
+	}
+	ticker := time.NewTicker(time.Duration(agentConfig.PollInterval) * time.Second)
+	defer ticker.Stop()
+
 	for {
-		metrics := getRuntimeMetrics()
-		c.updateCounter = c.UpdateMetrics(metrics)
-		c.lastUpdateMetrics = metrics
-		ticks += agentConfig.PollInterval
-		if ticks%limit == 0 {
-			if !c.isNotSupportBatch {
-				if err := c.updaterClient.ExternalBatchUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics); err != nil {
-					log.Error("API не поддерживает /updates/")
-					c.isNotSupportBatch = true
-				}
+		select {
+		case <-ctx.Done():
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				return ctx.Err()
 			}
-			if c.isNotSupportBatch {
-				err := c.updaterClient.ExternalUpdateJSONMetrics(log, c.updateCounter, c.lastUpdateMetrics)
-				if err != nil {
-					log.Error("Ошибка при обновлении метрик ", "error", err)
+			return nil
+		case data := <-chMetricsToSave:
+			c.UpdateMetrics(log, data)
+		case <-ticker.C:
+			ticks += agentConfig.PollInterval
+			if ticks%agentConfig.ReportInterval == 0 {
+				c.mutex.RLock()
+				for _, metric := range c.lastUpdateMetrics {
+					chUpdate <- metric
 				}
+				c.mutex.RUnlock()
+
+				chUpdate <- &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: getPointer(c.updateCounter.Swap(0))}
 			}
-			c.updateCounter = 0
+			ticks %= agentConfig.ReportInterval
 		}
-		ticks %= limit
-		time.Sleep(time.Duration(agentConfig.PollInterval) * time.Second)
 	}
 }
 
-func getRuntimeMetrics() map[string]float64 {
+func getRuntimeMetrics() (map[string]*models.Metrics, error) {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 
-	metrics := map[string]float64{
-		"Alloc":         float64(ms.Alloc),
-		"BuckHashSys":   float64(ms.BuckHashSys),
-		"Frees":         float64(ms.Frees),
-		"GCCPUFraction": ms.GCCPUFraction,
-		"GCSys":         float64(ms.GCSys),
-		"HeapAlloc":     float64(ms.HeapAlloc),
-		"HeapIdle":      float64(ms.HeapIdle),
-		"HeapInuse":     float64(ms.HeapInuse),
-		"HeapObjects":   float64(ms.HeapObjects),
-		"HeapReleased":  float64(ms.HeapReleased),
-		"HeapSys":       float64(ms.HeapSys),
-		"LastGC":        float64(ms.LastGC),
-		"Lookups":       float64(ms.Lookups),
-		"MCacheInuse":   float64(ms.MCacheInuse),
-		"MCacheSys":     float64(ms.MCacheSys),
-		"MSpanInuse":    float64(ms.MSpanInuse),
-		"MSpanSys":      float64(ms.MSpanSys),
-		"Mallocs":       float64(ms.Mallocs),
-		"NextGC":        float64(ms.NextGC),
-		"NumForcedGC":   float64(ms.NumForcedGC),
-		"NumGC":         float64(ms.NumGC),
-		"OtherSys":      float64(ms.OtherSys),
-		"PauseTotalNs":  float64(ms.PauseTotalNs),
-		"StackInuse":    float64(ms.StackInuse),
-		"StackSys":      float64(ms.StackSys),
-		"Sys":           float64(ms.Sys),
-		"TotalAlloc":    float64(ms.TotalAlloc),
-		"RandomValue":   rand.Float64(),
+	metrics := map[string]*models.Metrics{
+		"Alloc":         {ID: "Alloc", MType: models.Gauge, Value: getPointer(float64(ms.Alloc))},
+		"BuckHashSys":   {ID: "BuckHashSys", MType: models.Gauge, Value: getPointer(float64(ms.BuckHashSys))},
+		"Frees":         {ID: "Frees", MType: models.Gauge, Value: getPointer(float64(ms.Frees))},
+		"GCCPUFraction": {ID: "GCCPUFraction", MType: models.Gauge, Value: getPointer(float64(ms.GCCPUFraction))},
+		"GCSys":         {ID: "GCSys", MType: models.Gauge, Value: getPointer(float64(ms.GCSys))},
+		"HeapAlloc":     {ID: "HeapAlloc", MType: models.Gauge, Value: getPointer(float64(ms.HeapAlloc))},
+		"HeapIdle":      {ID: "HeapIdle", MType: models.Gauge, Value: getPointer(float64(ms.HeapIdle))},
+		"HeapInuse":     {ID: "HeapInuse", MType: models.Gauge, Value: getPointer(float64(ms.HeapInuse))},
+		"HeapObjects":   {ID: "HeapObjects", MType: models.Gauge, Value: getPointer(float64(ms.HeapObjects))},
+		"HeapReleased":  {ID: "HeapReleased", MType: models.Gauge, Value: getPointer(float64(ms.HeapReleased))},
+		"HeapSys":       {ID: "HeapSys", MType: models.Gauge, Value: getPointer(float64(ms.HeapSys))},
+		"LastGC":        {ID: "LastGC", MType: models.Gauge, Value: getPointer(float64(ms.LastGC))},
+		"Lookups":       {ID: "Lookups", MType: models.Gauge, Value: getPointer(float64(ms.Lookups))},
+		"MCacheInuse":   {ID: "MCacheInuse", MType: models.Gauge, Value: getPointer(float64(ms.MCacheInuse))},
+		"MCacheSys":     {ID: "MCacheSys", MType: models.Gauge, Value: getPointer(float64(ms.MCacheSys))},
+		"MSpanInuse":    {ID: "MSpanInuse", MType: models.Gauge, Value: getPointer(float64(ms.MSpanInuse))},
+		"MSpanSys":      {ID: "MSpanSys", MType: models.Gauge, Value: getPointer(float64(ms.MSpanSys))},
+		"Mallocs":       {ID: "Mallocs", MType: models.Gauge, Value: getPointer(float64(ms.Mallocs))},
+		"NextGC":        {ID: "NextGC", MType: models.Gauge, Value: getPointer(float64(ms.NextGC))},
+		"NumForcedGC":   {ID: "NumForcedGC", MType: models.Gauge, Value: getPointer(float64(ms.NumForcedGC))},
+		"NumGC":         {ID: "NumGC", MType: models.Gauge, Value: getPointer(float64(ms.NumGC))},
+		"OtherSys":      {ID: "OtherSys", MType: models.Gauge, Value: getPointer(float64(ms.OtherSys))},
+		"PauseTotalNs":  {ID: "PauseTotalNs", MType: models.Gauge, Value: getPointer(float64(ms.PauseTotalNs))},
+		"StackInuse":    {ID: "StackInuse", MType: models.Gauge, Value: getPointer(float64(ms.StackInuse))},
+		"StackSys":      {ID: "StackSys", MType: models.Gauge, Value: getPointer(float64(ms.StackSys))},
+		"Sys":           {ID: "Sys", MType: models.Gauge, Value: getPointer(float64(ms.Sys))},
+		"TotalAlloc":    {ID: "TotalAlloc", MType: models.Gauge, Value: getPointer(float64(ms.TotalAlloc))},
+		"RandomValue":   {ID: "RandomValue", MType: models.Gauge, Value: getPointer(rand.Float64())},
 	}
-	return metrics
+
+	return metrics, nil
 }
 
-func (c *CollectorImpl) UpdateMetrics(metrics map[string]float64) int64 {
+func getAdditionalMetrics() (map[string]*models.Metrics, error) {
+	v, errMemory := mem.VirtualMemory()
+	if errMemory != nil {
+		return nil, errMemory
+	}
+	percent, errCPU := cpu.Percent(time.Second, false)
+	if errCPU != nil {
+		return nil, errMemory
+	}
+
+	metrics := map[string]*models.Metrics{
+		"TotalMemory":     {ID: "TotalMemory", MType: models.Gauge, Value: getPointer(float64(v.Total))},
+		"FreeMemory":      {ID: "FreeMemory", MType: models.Gauge, Value: getPointer(float64(v.Free))},
+		"CPUutilization1": {ID: "CPUutilization1", MType: models.Gauge, Value: getPointer(percent[0])},
+	}
+	return metrics, nil
+}
+
+func (c *CollectorImpl) UpdateMetrics(log *slog.Logger, metrics map[string]*models.Metrics) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	updateCounter := c.updateCounter
 	for k, v := range metrics {
 		if metric, ok := c.lastUpdateMetrics[k]; ok {
 			if metric != v {
-				updateCounter++
+				c.updateCounter.Add(1)
 			}
 		} else {
-			updateCounter++
+			c.updateCounter.Add(1)
 		}
 		c.lastUpdateMetrics[k] = v
+		log.Debug("успешно обновлены метрики")
 	}
-	return updateCounter
+}
+
+func updater(ctx context.Context, log *slog.Logger, config config.AgentConfig,
+	metrics chan<- map[string]*models.Metrics, getMetricsFunc func() (map[string]*models.Metrics, error)) {
+	ticker := time.NewTicker(time.Duration(config.PollInterval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Debug("завершение работы горутины с обновлением дополнительных метрик")
+			return
+		case <-ticker.C:
+			data, err := getMetricsFunc()
+			if err != nil {
+				log.Error("ошибка получения метрик", "error", err)
+				os.Exit(1)
+			}
+			metrics <- data
+		}
+	}
+}
+
+func worker(ctx context.Context, log *slog.Logger, updateChannel <-chan *models.Metrics,
+	client repository.UpdaterClient, key string,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case metric := <-updateChannel:
+			err := client.ExternalUpdateMetric(ctx, log, key, metric)
+			if err != nil {
+				log.Error("ошибка при обновлении метрики", "error", err)
+			}
+		}
+	}
+}
+
+func getPointer[T float64 | int64](val T) *T {
+	return &val
 }
