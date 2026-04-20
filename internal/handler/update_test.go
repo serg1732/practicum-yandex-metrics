@@ -9,14 +9,20 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
+	"github.com/serg1732/practicum-yandex-metrics/internal/handler/mocks"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUpdateHandler(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAuditor := mocks.NewMockAuditor(ctrl)
+
 	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(context.Background(), slog.Default(),
-		&config.ServerConfig{}))
+		&config.ServerConfig{}), mockAuditor)
 	testData := []struct {
 		name           string
 		req            *http.Request
@@ -41,6 +47,9 @@ func TestUpdateHandler(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
+			if td.expectedStatus == http.StatusOK {
+				mockAuditor.EXPECT().BroadCast(gomock.Any()).Times(1)
+			}
 			mux := http.NewServeMux()
 			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdatePathValuesHandler(slog.Default()))
 			rr := httptest.NewRecorder()

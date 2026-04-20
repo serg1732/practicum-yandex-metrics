@@ -14,6 +14,7 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
 	"github.com/serg1732/practicum-yandex-metrics/internal/logger"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
+	"github.com/serg1732/practicum-yandex-metrics/internal/service"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -32,6 +33,15 @@ func main() {
 	)
 	defer stop()
 
+	audit := service.BuildAuditor(log)
+	if serverConfig.AuditFile != "" {
+		audit.Subscribe(service.BuildFileSubscriber(serverConfig.AuditFile))
+	}
+
+	if serverConfig.AuditUrl != "" {
+		audit.Subscribe(service.BuildHttpSubscriber(repository.BuildRestyAuditMetrics(serverConfig.AuditUrl)))
+	}
+
 	var mux *chi.Mux
 	if serverConfig.DSN != "" {
 		db, err := repository.BuildDataBase(ctx, log, serverConfig)
@@ -45,13 +55,13 @@ func main() {
 			log.Error("Ошибка при миграции", "error", errMigrate)
 			os.Exit(1)
 		}
-		updaterHandler := handler.BuildUpdateHandler(db)
+		updaterHandler := handler.BuildUpdateHandler(db, &audit)
 		readHandlers := handler.BuildReadHandler(db)
 		mux = buildRouter(log, db, updaterHandler, readHandlers, serverConfig.Key)
 
 	} else {
 		storage := repository.BuildMemStorage(ctx, log, serverConfig)
-		updaterHandler := handler.BuildUpdateHandler(storage)
+		updaterHandler := handler.BuildUpdateHandler(storage, &audit)
 		readHandlers := handler.BuildReadHandler(storage)
 		mux = buildRouter(log, nil, updaterHandler, readHandlers, serverConfig.Key)
 	}

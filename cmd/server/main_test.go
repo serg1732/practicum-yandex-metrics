@@ -31,7 +31,7 @@ func TestUpdateServerHandler(t *testing.T) {
 			FileStoragePath: "storage.json",
 			Restore:         false,
 		})
-	updateHandler := handler.BuildUpdateHandler(storage)
+	updateHandler := handler.BuildUpdateHandler(storage, nil)
 	readHandlers := handler.BuildReadHandler(storage)
 
 	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, ""))
@@ -117,7 +117,7 @@ func TestAllReadServerHandler(t *testing.T) {
 	mockReadRepo := mocks.NewMockReadStorage(ctrl)
 	mockUpdateRepo := mocks.NewMockUpdateStorage(ctrl)
 
-	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo)
+	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo, nil)
 	readHandlers := handler.BuildReadHandler(mockReadRepo)
 
 	templateHTML, errParseTemplate := template.New("All").Parse(templateMetricsPage)
@@ -221,7 +221,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 	mockReadRepo := mocks.NewMockReadStorage(ctrl)
 	mockUpdateRepo := mocks.NewMockUpdateStorage(ctrl)
 
-	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo)
+	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo, nil)
 	readHandlers := handler.BuildReadHandler(mockReadRepo)
 
 	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, ""))
