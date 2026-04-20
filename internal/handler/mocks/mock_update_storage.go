@@ -63,3 +63,38 @@ func (mr *MockUpdateStorageMockRecorder) Updates(ctx, log, Data interface{}) *go
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Updates", reflect.TypeOf((*MockUpdateStorage)(nil).Updates), ctx, log, Data)
 }
+
+// MockAuditor is a mock of Auditor interface.
+type MockAuditor struct {
+	ctrl     *gomock.Controller
+	recorder *MockAuditorMockRecorder
+}
+
+// MockAuditorMockRecorder is the mock recorder for MockAuditor.
+type MockAuditorMockRecorder struct {
+	mock *MockAuditor
+}
+
+// NewMockAuditor creates a new mock instance.
+func NewMockAuditor(ctrl *gomock.Controller) *MockAuditor {
+	mock := &MockAuditor{ctrl: ctrl}
+	mock.recorder = &MockAuditorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAuditor) EXPECT() *MockAuditorMockRecorder {
+	return m.recorder
+}
+
+// BroadCast mocks base method.
+func (m *MockAuditor) BroadCast(data *models.AuditEvent) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "BroadCast", data)
+}
+
+// BroadCast indicates an expected call of BroadCast.
+func (mr *MockAuditorMockRecorder) BroadCast(data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BroadCast", reflect.TypeOf((*MockAuditor)(nil).BroadCast), data)
+}

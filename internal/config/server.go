@@ -13,6 +13,8 @@ type ServerConfig struct {
 	Restore         bool   `env:"RESTORE" default:"false"`
 	DSN             string `env:"DATABASE_DSN"`
 	Key             string `env:"KEY"`
+	AuditFile       string `env:"AUDIT_FILE"`
+	AuditUrl        string `env:"AUDIT_URL"`
 }
 
 // GetSeverConfig создает и собирает значение из флагов командной строк и env значений.
@@ -24,6 +26,8 @@ func GetSeverConfig() (*ServerConfig, error) {
 	flag.BoolVar(&serverConfig.Restore, "r", false, "restore storage server")
 	flag.StringVar(&serverConfig.DSN, "d", "", "database connection string")
 	flag.StringVar(&serverConfig.Key, "k", "", "key SHA256")
+	flag.StringVar(&serverConfig.AuditFile, "audit-file", "", "audit file")
+	flag.StringVar(&serverConfig.AuditUrl, "audit-url", "", "audit url")
 	flag.Parse()
 
 	if err := env.Parse(&serverConfig); err != nil {
