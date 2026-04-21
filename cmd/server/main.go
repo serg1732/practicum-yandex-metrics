@@ -101,6 +101,7 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 	router.Use(logger.WithLogger(log))
 	router.Use(handler.WithCheckHash(log, key))
 	router.Use(handler.WithGzipCompress(log))
+	router.Mount("/debug", middleware.Profiler())
 
 	router.Route("/updates", func(r chi.Router) {
 		r.Post("/", updateHandlers.UpdateValues(log))
