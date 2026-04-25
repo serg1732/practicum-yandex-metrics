@@ -20,6 +20,7 @@ type (
 	}
 )
 
+// WithLogger реализация логирования входящих запросов в middleware слое.
 func WithLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		logFn := func(w http.ResponseWriter, r *http.Request) {
@@ -55,12 +56,14 @@ func WithLogger(log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// Write переопределение функционала записи.
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	size, err := r.ResponseWriter.Write(b)
 	r.responseData.size += size
 	return size, err
 }
 
+// WriteHeader переопределение функционала записи заголовков.
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 	r.ResponseWriter.WriteHeader(statusCode)

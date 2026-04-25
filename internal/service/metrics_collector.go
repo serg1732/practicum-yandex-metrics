@@ -18,11 +18,16 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
+// Collector представляет интерфейс, отражающий реализацию сборщика(агента) метрик.
 type Collector interface {
+	// Run функция запуска агента-сборщика метрик.
+	// Возвращает ошибку, если не удалось запустить.
 	Run(ctx context.Context, log *slog.Logger, agentConfig config.AgentConfig) error
+	// UpdateMetrics функция обновления локального хранилища метрик агента.
 	UpdateMetrics(log *slog.Logger, metrics map[string]*models.Metrics)
 }
 
+// BuildCollector функция создания агента сборщика.
 func BuildCollector() Collector {
 	return &CollectorImpl{
 		updateCounter:     atomic.Int64{},
@@ -30,13 +35,19 @@ func BuildCollector() Collector {
 	}
 }
 
+// CollectorImpl агент-сборщик метрик.
 type CollectorImpl struct {
-	updateCounter     atomic.Int64
+	// updateCounter счетчик обновленных метрик.
+	updateCounter atomic.Int64
+	// lastUpdateMetrics сохраняет / обновляет собираемые метрики.
 	lastUpdateMetrics map[string]*models.Metrics
-	mutex             sync.RWMutex
+	// mutex мьютех синхронизации обновления метрик.
+	mutex sync.RWMutex
+	// isNotSupportBatch поддерживается ли обработка батчами.
 	isNotSupportBatch bool
 }
 
+// Run функция запуска агента-сборщика метрик.
 func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig config.AgentConfig) error {
 	log.Info("Запуск сборщика метрик")
 	ticks := 0
@@ -78,6 +89,7 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 	}
 }
 
+// getRuntimeMetrics функция съема метрик системы.
 func getRuntimeMetrics() (map[string]*models.Metrics, error) {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
@@ -116,6 +128,7 @@ func getRuntimeMetrics() (map[string]*models.Metrics, error) {
 	return metrics, nil
 }
 
+// getAdditionalMetrics получение дополнительных метрик TotalMemory, FreeMemory, CPUutilization1.
 func getAdditionalMetrics() (map[string]*models.Metrics, error) {
 	v, errMemory := mem.VirtualMemory()
 	if errMemory != nil {
@@ -134,6 +147,7 @@ func getAdditionalMetrics() (map[string]*models.Metrics, error) {
 	return metrics, nil
 }
 
+// UpdateMetrics функция обновления метрик и подсчета их количества.
 func (c *CollectorImpl) UpdateMetrics(log *slog.Logger, metrics map[string]*models.Metrics) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -150,6 +164,7 @@ func (c *CollectorImpl) UpdateMetrics(log *slog.Logger, metrics map[string]*mode
 	}
 }
 
+// updater функция обработки сигналов обновления по таймеру метрик.
 func updater(ctx context.Context, log *slog.Logger, config config.AgentConfig,
 	metrics chan<- map[string]*models.Metrics, getMetricsFunc func() (map[string]*models.Metrics, error)) {
 	ticker := time.NewTicker(time.Duration(config.PollInterval) * time.Second)
@@ -171,6 +186,8 @@ func updater(ctx context.Context, log *slog.Logger, config config.AgentConfig,
 	}
 }
 
+// worker обработчик канала по отправке метрик на сервер.
+// По сигналу updateChannel отправляет данные на сервер.
 func worker(ctx context.Context, log *slog.Logger, updateChannel <-chan *models.Metrics,
 	client repository.UpdaterClient, key string,
 ) {
@@ -187,6 +204,8 @@ func worker(ctx context.Context, log *slog.Logger, updateChannel <-chan *models.
 	}
 }
 
+// getPointer функция получения из примитивного типа в указатель.
+// Возможные значения float64 или int64.
 func getPointer[T float64 | int64](val T) *T {
 	return &val
 }

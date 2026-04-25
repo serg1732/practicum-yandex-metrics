@@ -12,24 +12,32 @@ import (
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
 
+// UpdateStorage представляет интерфейс, отражающий реализацию хранилища.
 type UpdateStorage interface {
 	Update(ctx context.Context, log *slog.Logger, Data *models.Metrics) error
 	Updates(ctx context.Context, log *slog.Logger, Data []*models.Metrics) error
 }
 
+// Auditor представляет интерфейс, отражающий реализацию аудитора обработки метрик.
 type Auditor interface {
+	// BroadCast уведомление подписчиков об успешной обработке метрики.
 	BroadCast(data *models.AuditEvent)
 }
 
+// UpdateHandlerImpl обработчик запросов на запись в хранилище.
 type UpdateHandlerImpl struct {
+	// auditor аудитор запросов.
 	auditor Auditor
+	// storage хранилище метрик.
 	storage UpdateStorage
 }
 
+// BuildUpdateHandler функция создания обработчика запросов на запись в хранилище.
 func BuildUpdateHandler(storage UpdateStorage, auditor Auditor) UpdateHandlerImpl {
 	return UpdateHandlerImpl{storage: storage, auditor: auditor}
 }
 
+// UpdatePathValuesHandler обработчик запрос с обовлением метрики из Path значений.
 func (h *UpdateHandlerImpl) UpdatePathValuesHandler(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -78,6 +86,7 @@ func (h *UpdateHandlerImpl) UpdatePathValuesHandler(log *slog.Logger) http.Handl
 	}
 }
 
+// UpdateJSONHandler обработчик обновления значения метрики.
 func (h *UpdateHandlerImpl) UpdateJSONHandler(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var metric models.Metrics
@@ -114,6 +123,7 @@ func (h *UpdateHandlerImpl) UpdateJSONHandler(log *slog.Logger) http.HandlerFunc
 	}
 }
 
+// UpdateValues обработчик запроса на запись / обновление набора метрик.
 func (h *UpdateHandlerImpl) UpdateValues(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var metrics []*models.Metrics

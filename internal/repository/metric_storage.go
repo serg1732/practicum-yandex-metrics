@@ -13,6 +13,7 @@ import (
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
 
+// BuildMemStorage инициализация файлового хранилища.
 func BuildMemStorage(ctx context.Context, log *slog.Logger, serverConfig *config.ServerConfig) *MemStorageRepository {
 	counter := make(map[string]*models.Metrics)
 	gauge := make(map[string]*models.Metrics)
@@ -31,6 +32,7 @@ func BuildMemStorage(ctx context.Context, log *slog.Logger, serverConfig *config
 	return repo
 }
 
+// MemStorageRepository файловое хранилище.
 type MemStorageRepository struct {
 	File       *os.File
 	MemStorage models.MemStorage
@@ -39,6 +41,7 @@ type MemStorageRepository struct {
 	mutex      sync.Mutex
 }
 
+// runSaver запуск обновлений по таймеру.
 func (m *MemStorageRepository) runSaver(log *slog.Logger) {
 	if m.Config.StoreInternal == 0 {
 		log.Info("Задано значение 0 между обновлениями")
@@ -68,14 +71,17 @@ func (m *MemStorageRepository) runSaver(log *slog.Logger) {
 	}()
 }
 
+// GetAllCounters получение всех метрик типа counter.
 func (m *MemStorageRepository) GetAllCounters(_ context.Context) (map[string]*models.Metrics, error) {
 	return m.MemStorage.CounterMap, nil
 }
 
+// GetAllGauges получение всех метрик типа gauge.
 func (m *MemStorageRepository) GetAllGauges(_ context.Context) (map[string]*models.Metrics, error) {
 	return m.MemStorage.GaugeMap, nil
 }
 
+// GetGauge получение метрики по имени с типом gauge.
 func (m *MemStorageRepository) GetGauge(_ context.Context, name string) (*models.Metrics, error) {
 	val, isExist := m.MemStorage.GaugeMap[name]
 	if !isExist {
@@ -84,6 +90,7 @@ func (m *MemStorageRepository) GetGauge(_ context.Context, name string) (*models
 	return val, nil
 }
 
+// Update обновление метрики.
 func (m *MemStorageRepository) Update(_ context.Context, log *slog.Logger, Data *models.Metrics) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
@@ -108,6 +115,7 @@ func (m *MemStorageRepository) Update(_ context.Context, log *slog.Logger, Data 
 	return nil
 }
 
+// Updates обновление набора метрик.
 func (m *MemStorageRepository) Updates(ctx context.Context, log *slog.Logger, Data []*models.Metrics) error {
 	for _, metric := range Data {
 		if err := m.Update(ctx, log, metric); err != nil {
@@ -117,6 +125,7 @@ func (m *MemStorageRepository) Updates(ctx context.Context, log *slog.Logger, Da
 	return nil
 }
 
+// GetCounter получение метрики типа counter.
 func (m *MemStorageRepository) GetCounter(_ context.Context, name string) (*models.Metrics, error) {
 	counter, isExist := m.MemStorage.CounterMap[name]
 	if !isExist {
@@ -124,6 +133,8 @@ func (m *MemStorageRepository) GetCounter(_ context.Context, name string) (*mode
 	}
 	return counter, nil
 }
+
+// Save запись в файловое хранилище.
 func (m *MemStorageRepository) Save(log *slog.Logger) {
 	file, _ := os.Create(m.Config.FileStoragePath)
 	sliceSave := make([]models.Metrics, 0)
@@ -141,6 +152,7 @@ func (m *MemStorageRepository) Save(log *slog.Logger) {
 	file.Close()
 }
 
+// restoreFromFile загрузка из файлового хранилища.
 func restoreFromFile(log *slog.Logger, pathSave string, gauge map[string]*models.Metrics, counter map[string]*models.Metrics) {
 	data, err := os.ReadFile(pathSave)
 	if err != nil {

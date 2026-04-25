@@ -9,15 +9,18 @@ import (
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
 
+// AuditMetricsClient HTTP клиент по отправке событий.
 type AuditMetricsClient struct {
 	httpClient *resty.Client
 	host       string
 }
 
+// BuildRestyAuditMetrics создание клиента по отправке событий.
 func BuildRestyAuditMetrics(host string) *AuditMetricsClient {
 	return &AuditMetricsClient{httpClient: resty.New(), host: host}
 }
 
+// SendMetrics отправка события метрик.
 func (a *AuditMetricsClient) SendMetrics(logger *slog.Logger, event *models.AuditEvent) {
 	rawEvent, errEvent := json.Marshal(event)
 	if errEvent != nil {

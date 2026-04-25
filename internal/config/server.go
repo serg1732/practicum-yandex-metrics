@@ -6,15 +6,24 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// ServerConfig конфигурация сервера хранилища метрик.
 type ServerConfig struct {
-	RunAddr         string `env:"ADDRESS"`
-	StoreInternal   int64  `env:"STORE_INTERVAL"`
+	// RunAddr - адрес обработки запросов по работе с метриками в хранилище.
+	RunAddr string `env:"ADDRESS"`
+	// StoreInternal - период сохранения метрик в файловом хранилище.
+	StoreInternal int64 `env:"STORE_INTERVAL"`
+	// FileStoragePath - путь хранилища метрик в файле.
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-	Restore         bool   `env:"RESTORE" default:"false"`
-	DSN             string `env:"DATABASE_DSN"`
-	Key             string `env:"KEY"`
-	AuditFile       string `env:"AUDIT_FILE"`
-	AuditUrl        string `env:"AUDIT_URL"`
+	// Restore - флаг загрузки метрик из файлового хранилища.
+	Restore bool `env:"RESTORE" default:"false"`
+	// DSN - подключение к БД.
+	DSN string `env:"DATABASE_DSN"`
+	// Key - ключ проверки hash запросов.
+	Key string `env:"KEY"`
+	// AuditFile - путь до сохранения аудита запросов в файле.
+	AuditFile string `env:"AUDIT_FILE"`
+	// AuditUrl - адрес для отправки событий.
+	AuditUrl string `env:"AUDIT_URL"`
 }
 
 // GetSeverConfig создает и собирает значение из флагов командной строк и env значений.
