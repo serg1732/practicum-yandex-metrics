@@ -1,5 +1,6 @@
 package models
 
+// Типы метрик.
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
@@ -11,9 +12,14 @@ const (
 // что бы отличать значение "0", от не заданного значения
 // и соответственно не кодировать в структуру.
 type Metrics struct {
-	ID    string   `json:"id"`
-	MType string   `json:"type"`
-	Delta *int64   `json:"delta,omitempty"`
+	// ID - имя метрики.
+	ID string `json:"id"`
+	// MType - тип метрики.
+	MType string `json:"type"`
+	// Delta - значение для counter метрики.
+	Delta *int64 `json:"delta,omitempty"`
+	// Value - значение для gauge метрики.
 	Value *float64 `json:"value,omitempty"`
-	Hash  string   `json:"hash,omitempty"`
+	// Hash - hash значение.
+	Hash string `json:"hash,omitempty"`
 }

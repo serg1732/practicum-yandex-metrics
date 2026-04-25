@@ -17,6 +17,7 @@ import (
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
 
+// UpdaterClient представляет интерфейс, отражающий реализацию HTTP клиента по обновлению метрик на сервере.
 type UpdaterClient interface {
 	ExternalUpdateMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error
 	ExternalUpdateJSONMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64, key string) error
@@ -24,15 +25,18 @@ type UpdaterClient interface {
 	ExternalUpdateMetric(ctx context.Context, log *slog.Logger, key string, metric *models.Metrics) error
 }
 
+// RestyUpdaterClient HTTP клиент обновления метрик на сервере.
 type RestyUpdaterClient struct {
 	httpClient *resty.Client
 	host       string
 }
 
+// BuildRestyUpdaterMetric создание HTTP клиента по обновлению метрик на сервере.
 func BuildRestyUpdaterMetric(host string) UpdaterClient {
 	return RestyUpdaterClient{httpClient: resty.New(), host: host}
 }
 
+// ExternalUpdateMetrics отправка метрик через url значение.
 func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounter int64, metrics map[string]float64) error {
 	for k, v := range metrics {
 		urlModified := fmt.Sprintf("%s/update/%s/%s/%v", r.host, models.Gauge, k, v)
@@ -58,6 +62,7 @@ func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounte
 	return nil
 }
 
+// ExternalBatchUpdateJSONMetrics отправка метрик наборами (в теле запроса в формате JSON).
 func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(
 	log *slog.Logger, updateCounter int64, metrics map[string]float64, key string,
 ) error {
@@ -99,6 +104,7 @@ func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(
 	return nil
 }
 
+// ExternalUpdateJSONMetrics добавление / обновление метрики на сервере.
 func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(
 	log *slog.Logger, updateCounter int64, metrics map[string]float64, key string) error {
 	urlModified := fmt.Sprintf("%s/update/", r.host)
@@ -165,6 +171,7 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(
 	return nil
 }
 
+// ExternalUpdateMetric добавление / обновление метрики.
 func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.Logger, key string, metric *models.Metrics) error {
 	urlModified := fmt.Sprintf("%s/update/", r.host)
 	jsonMetric, err := json.Marshal(metric)
@@ -204,6 +211,7 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 	return nil
 }
 
+// gzipBody вспомогательная функция по сжатию.
 func gzipBody(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -219,6 +227,7 @@ func gzipBody(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// getHash вспомогательная функция получения hash.
 func getHash(data []byte, key string) (string, error) {
 	h := hmac.New(sha256.New, []byte(key))
 

@@ -15,6 +15,7 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 )
 
+// ReadStorage представляет интерфейс, отражающий функционал по работе с хранилищем.
 type ReadStorage interface {
 	GetCounter(ctx context.Context, name string) (*models.Metrics, error)
 	GetGauge(ctx context.Context, name string) (*models.Metrics, error)
@@ -22,15 +23,18 @@ type ReadStorage interface {
 	GetAllGauges(ctx context.Context) (map[string]*models.Metrics, error)
 }
 
+// BuildReadHandler создание обработчика получения метрик.
 func BuildReadHandler(storage ReadStorage) ReadMetricsHandlerImpl {
 	return ReadMetricsHandlerImpl{storage: storage}
 }
 
+// ReadMetricsHandlerImpl обработчик получения метрик.
 type ReadMetricsHandlerImpl struct {
 	storage      ReadStorage
 	templateHTML *template.Template
 }
 
+// AllMetricsHandler обработчик получения всех метрик из хранилища.
 func (h *ReadMetricsHandlerImpl) AllMetricsHandler(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -68,6 +72,7 @@ func (h *ReadMetricsHandlerImpl) AllMetricsHandler(log *slog.Logger) http.Handle
 	}
 }
 
+// SelectMetricHandler обработчик получения метрики по имени и типу.
 func (h *ReadMetricsHandlerImpl) SelectMetricHandler(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -109,6 +114,8 @@ func (h *ReadMetricsHandlerImpl) SelectMetricHandler(log *slog.Logger) http.Hand
 	}
 }
 
+// SelectValueMetricHandler обработчик получения метрики.
+// Данные имени метрики и типа указываются в теле запроса в формате JSON.
 func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -176,6 +183,7 @@ func (h *ReadMetricsHandlerImpl) SelectValueMetricHandler(log *slog.Logger) http
 	}
 }
 
+// PingDatabase обработчик запроса на проверку работоспособности БД.
 func (h *ReadMetricsHandlerImpl) PingDatabase(log *slog.Logger, db *repository.DataBase) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if db != nil && db.Ping(r.Context()) != nil {
@@ -187,6 +195,7 @@ func (h *ReadMetricsHandlerImpl) PingDatabase(log *slog.Logger, db *repository.D
 	}
 }
 
+// getTemplate шаблон для вывода всех метрик.
 func getTemplate() string {
 	return `
 	<!doctype html>
