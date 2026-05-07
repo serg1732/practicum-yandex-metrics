@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,7 +15,7 @@ import (
 // Subscriber представляет интерфейс, отражающий реализацию подписчика(обработчика лога аудита).
 type Subscriber interface {
 	// Notify функция уведомления об успешной обработке метрики.
-	Notify(logger *slog.Logger, data *models.AuditEvent)
+	Notify(ctx context.Context, logger *slog.Logger, data *models.AuditEvent)
 }
 
 // BuildAuditor функция создания аудита запросов с паттерном "Наблюдатель".
@@ -31,23 +32,28 @@ type Auditor struct {
 	logger *slog.Logger
 	// subscribers - набор подписчиков, которых будет уведомлять.
 	subscribers []Subscriber
+	m           sync.Mutex
 }
 
 // BroadCast функция запуска уведомления всех подписчиков.
-func (a *Auditor) BroadCast(data *models.AuditEvent) {
+func (a *Auditor) BroadCast(ctx context.Context, data *models.AuditEvent) {
+	a.m.Lock()
+	defer a.m.Unlock()
 	for _, sub := range a.subscribers {
-		go sub.Notify(a.logger, data)
+		go sub.Notify(ctx, a.logger, data)
 	}
 }
 
 // Subscribe функция добавления подписчика.
 func (a *Auditor) Subscribe(subscriber Subscriber) {
+	a.m.Lock()
+	defer a.m.Unlock()
 	a.subscribers = append(a.subscribers, subscriber)
 }
 
-// BuildHttpSubscriber создание подписчика, который обрабатывает лог через http запрос.
-func BuildHttpSubscriber(httpClient *repository.AuditMetricsClient) Subscriber {
-	return &HttpSubscriber{
+// BuildHTTPSubscriber создание подписчика, который обрабатывает лог через http запрос.
+func BuildHTTPSubscriber(httpClient *repository.AuditMetricsClient) Subscriber {
+	return &HTTPSubscriber{
 		client: httpClient,
 	}
 }
@@ -59,27 +65,27 @@ func BuildFileSubscriber(filepath string) Subscriber {
 	}
 }
 
-// HttpSubscriber подписчик с обработкой события по http.
-type HttpSubscriber struct {
+// HTTPSubscriber подписчик с обработкой события по http.
+type HTTPSubscriber struct {
 	client *repository.AuditMetricsClient
 }
 
 // Notify обработка события по http.
-func (h *HttpSubscriber) Notify(logger *slog.Logger, data *models.AuditEvent) {
-	h.client.SendMetrics(logger, data)
+func (h *HTTPSubscriber) Notify(ctx context.Context, logger *slog.Logger, data *models.AuditEvent) {
+	h.client.SendMetrics(ctx, logger, data)
 }
 
 // FileSubscribe подписчик с обработкой события через файл.
 type FileSubscribe struct {
 	// filepath путь до файла.
 	filepath string
-	sync.Mutex
+	m        sync.Mutex
 }
 
 // Notify обработка события через файл.
-func (f *FileSubscribe) Notify(logger *slog.Logger, data *models.AuditEvent) {
-	f.Lock()
-	defer f.Unlock()
+func (f *FileSubscribe) Notify(_ context.Context, logger *slog.Logger, data *models.AuditEvent) {
+	f.m.Lock()
+	defer f.m.Unlock()
 	file, err := os.OpenFile(f.filepath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		fmt.Println("Ошибка открытия файла:", err)

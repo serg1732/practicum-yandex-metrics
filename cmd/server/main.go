@@ -38,8 +38,8 @@ func main() {
 		audit.Subscribe(service.BuildFileSubscriber(serverConfig.AuditFile))
 	}
 
-	if serverConfig.AuditUrl != "" {
-		audit.Subscribe(service.BuildHttpSubscriber(repository.BuildRestyAuditMetrics(serverConfig.AuditUrl)))
+	if serverConfig.AuditURL != "" {
+		audit.Subscribe(service.BuildHTTPSubscriber(repository.BuildRestyAuditMetrics(serverConfig.AuditURL)))
 	}
 
 	var mux *chi.Mux

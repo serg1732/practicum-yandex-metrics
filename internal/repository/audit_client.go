@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -21,13 +22,13 @@ func BuildRestyAuditMetrics(host string) *AuditMetricsClient {
 }
 
 // SendMetrics отправка события метрик.
-func (a *AuditMetricsClient) SendMetrics(logger *slog.Logger, event *models.AuditEvent) {
+func (a *AuditMetricsClient) SendMetrics(ctx context.Context, logger *slog.Logger, event *models.AuditEvent) {
 	rawEvent, errEvent := json.Marshal(event)
 	if errEvent != nil {
 		logger.Error("Ошибка при обработке события", "error", errEvent)
 		return
 	}
-	resp, err := a.httpClient.R().SetHeader("Content-Type", "application/json").SetBody(rawEvent).Post(a.host)
+	resp, err := a.httpClient.R().SetContext(ctx).SetHeader("Content-Type", "application/json").SetBody(rawEvent).Post(a.host)
 	if err != nil {
 		logger.Error("Ошибка при отправке события", "error", err)
 		return

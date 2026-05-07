@@ -11,12 +11,12 @@ import (
 type AgentConfig struct {
 	// RemoteAddr - адрес сервера отправки метрик.
 	RemoteAddr string `env:"ADDRESS"`
+	// Key - проверка hash значений запросов.
+	Key string `env:"KEY"`
 	// ReportInterval - интервал отправки метрик на сервер.
 	ReportInterval int `env:"REPORT_INTERVAL"`
 	// PollInterval - интервал сбора метрик.
 	PollInterval int `env:"POLL_INTERVAL"`
-	// Key - проверка hash значений запросов.
-	Key string `env:"KEY"`
 	// RateLimit - максимальное количество обработчиков на отправку метрик.
 	RateLimit int `env:"RATE_LIMIT"`
 }

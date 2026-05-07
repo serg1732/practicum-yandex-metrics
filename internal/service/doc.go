@@ -35,7 +35,7 @@
 Реализованные подписчики файловый и http.
 Создание http обработчика:
 
-	subscriber:= BuildHttpSubscriber(repository.BuildRestyAuditMetrics(serverConfig.AuditUrl))
+	subscriber:= BuildHTTPSubscriber(repository.BuildRestyAuditMetrics(serverConfig.AuditURL))
 
 Создание файлового обработчика:
 

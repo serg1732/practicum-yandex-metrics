@@ -7,12 +7,32 @@ import (
 	"sync"
 )
 
-var gzipPool = sync.Pool{
-	New: func() any {
-		w, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
-		return w
-	},
+type Pool[T any] struct {
+	sync.Pool
 }
+
+func (p *Pool[T]) Get() T {
+	return p.Pool.Get().(T)
+}
+
+func (p *Pool[T]) Put(x T) {
+	p.Pool.Put(x)
+}
+
+func NewPool[T any](newF func() T) *Pool[T] {
+	return &Pool[T]{
+		Pool: sync.Pool{
+			New: func() interface{} {
+				return newF()
+			},
+		},
+	}
+}
+
+var gzipPool = NewPool(func() *gzip.Writer {
+	w, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
+	return w
+})
 
 type compressWriter struct {
 	w           http.ResponseWriter
@@ -47,7 +67,7 @@ func (c *compressWriter) initWriter() {
 		return
 	}
 
-	zw := gzipPool.Get().(*gzip.Writer)
+	zw := gzipPool.Get()
 	zw.Reset(c.w)
 	c.zw = zw
 }

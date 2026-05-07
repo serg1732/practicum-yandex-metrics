@@ -88,13 +88,13 @@ func (m *MockAuditor) EXPECT() *MockAuditorMockRecorder {
 }
 
 // BroadCast mocks base method.
-func (m *MockAuditor) BroadCast(data *models.AuditEvent) {
+func (m *MockAuditor) BroadCast(ctx context.Context, data *models.AuditEvent) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "BroadCast", data)
+	m.ctrl.Call(m, "BroadCast", ctx, data)
 }
 
 // BroadCast indicates an expected call of BroadCast.
-func (mr *MockAuditorMockRecorder) BroadCast(data interface{}) *gomock.Call {
+func (mr *MockAuditorMockRecorder) BroadCast(ctx, data interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BroadCast", reflect.TypeOf((*MockAuditor)(nil).BroadCast), data)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BroadCast", reflect.TypeOf((*MockAuditor)(nil).BroadCast), ctx, data)
 }

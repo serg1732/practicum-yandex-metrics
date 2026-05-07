@@ -48,7 +48,7 @@ func TestUpdateHandler(t *testing.T) {
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
 			if td.expectedStatus == http.StatusOK {
-				mockAuditor.EXPECT().BroadCast(gomock.Any()).Times(1)
+				mockAuditor.EXPECT().BroadCast(gomock.Any(), gomock.Any()).Times(1)
 			}
 			mux := http.NewServeMux()
 			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdatePathValuesHandler(slog.Default()))

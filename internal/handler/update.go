@@ -21,7 +21,7 @@ type UpdateStorage interface {
 // Auditor представляет интерфейс, отражающий реализацию аудитора обработки метрик.
 type Auditor interface {
 	// BroadCast уведомление подписчиков об успешной обработке метрики.
-	BroadCast(data *models.AuditEvent)
+	BroadCast(ctx context.Context, data *models.AuditEvent)
 }
 
 // UpdateHandlerImpl обработчик запросов на запись в хранилище.
@@ -78,7 +78,7 @@ func (h *UpdateHandlerImpl) UpdatePathValuesHandler(log *slog.Logger) http.Handl
 			http.Error(w, "Invalid metric type", http.StatusBadRequest)
 			return
 		}
-		h.auditor.BroadCast(&models.AuditEvent{
+		h.auditor.BroadCast(r.Context(), &models.AuditEvent{
 			TS:        time.Now().Unix(),
 			Metrics:   []string{metricName},
 			IPAddress: strings.Split(r.RemoteAddr, ":")[0],
@@ -115,7 +115,7 @@ func (h *UpdateHandlerImpl) UpdateJSONHandler(log *slog.Logger) http.HandlerFunc
 			http.Error(w, "Invalid metric type", http.StatusBadRequest)
 			return
 		}
-		h.auditor.BroadCast(&models.AuditEvent{
+		h.auditor.BroadCast(r.Context(), &models.AuditEvent{
 			TS:        time.Now().Unix(),
 			Metrics:   []string{metric.ID},
 			IPAddress: strings.Split(r.RemoteAddr, ":")[0],
@@ -144,7 +144,7 @@ func (h *UpdateHandlerImpl) UpdateValues(log *slog.Logger) http.HandlerFunc {
 		for _, metric := range metrics {
 			names = append(names, metric.ID)
 		}
-		h.auditor.BroadCast(&models.AuditEvent{
+		h.auditor.BroadCast(r.Context(), &models.AuditEvent{
 			TS:        time.Now().Unix(),
 			Metrics:   names,
 			IPAddress: strings.Split(r.RemoteAddr, ":")[0],

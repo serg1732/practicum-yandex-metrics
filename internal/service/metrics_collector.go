@@ -37,10 +37,10 @@ func BuildCollector() Collector {
 
 // CollectorImpl агент-сборщик метрик.
 type CollectorImpl struct {
-	// updateCounter счетчик обновленных метрик.
-	updateCounter atomic.Int64
 	// lastUpdateMetrics сохраняет / обновляет собираемые метрики.
 	lastUpdateMetrics map[string]*models.Metrics
+	// updateCounter счетчик обновленных метрик.
+	updateCounter atomic.Int64
 	// mutex мьютех синхронизации обновления метрик.
 	mutex sync.RWMutex
 	// isNotSupportBatch поддерживается ли обработка батчами.

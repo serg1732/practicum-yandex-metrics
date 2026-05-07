@@ -212,7 +212,7 @@ type exampleAuditor struct {
 	events []*models.AuditEvent
 }
 
-func (a *exampleAuditor) BroadCast(data *models.AuditEvent) {
+func (a *exampleAuditor) BroadCast(_ context.Context, data *models.AuditEvent) {
 	a.events = append(a.events, data)
 }
 
