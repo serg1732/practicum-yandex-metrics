@@ -13,6 +13,7 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/compress"
 )
 
+// WithGzipCompress middleware обработчик для сжатия / получение исходных данных.
 func WithGzipCompress(log *slog.Logger) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		compressFunc := func(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +59,7 @@ func (r *ResponseWithBody) Write(b []byte) (int, error) {
 	return size, err
 }
 
+// WithCheckHash middleware по проверки hash значения запроса.
 func WithCheckHash(log *slog.Logger, key string) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +103,7 @@ func WithCheckHash(log *slog.Logger, key string) func(http.Handler) http.Handler
 	}
 }
 
+// getHash вспомогательная функция получения hash значения.
 func getHash(data []byte, key string) (string, error) {
 	h := hmac.New(sha256.New, []byte(key))
 

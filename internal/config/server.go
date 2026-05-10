@@ -6,13 +6,24 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// ServerConfig конфигурация сервера хранилища метрик.
 type ServerConfig struct {
-	RunAddr         string `env:"ADDRESS"`
-	StoreInternal   int64  `env:"STORE_INTERVAL"`
+	// RunAddr - адрес обработки запросов по работе с метриками в хранилище.
+	RunAddr string `env:"ADDRESS"`
+	// FileStoragePath - путь хранилища метрик в файле.
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-	Restore         bool   `env:"RESTORE" default:"false"`
-	DSN             string `env:"DATABASE_DSN"`
-	Key             string `env:"KEY"`
+	// DSN - подключение к БД.
+	DSN string `env:"DATABASE_DSN"`
+	// Key - ключ проверки hash запросов.
+	Key string `env:"KEY"`
+	// AuditFile - путь до сохранения аудита запросов в файле.
+	AuditFile string `env:"AUDIT_FILE"`
+	// AuditURL - адрес для отправки событий.
+	AuditURL string `env:"AUDIT_URL"`
+	// StoreInternal - период сохранения метрик в файловом хранилище.
+	StoreInternal int64 `env:"STORE_INTERVAL"`
+	// Restore - флаг загрузки метрик из файлового хранилища.
+	Restore bool `env:"RESTORE" default:"false"`
 }
 
 // GetSeverConfig создает и собирает значение из флагов командной строк и env значений.
@@ -24,6 +35,8 @@ func GetSeverConfig() (*ServerConfig, error) {
 	flag.BoolVar(&serverConfig.Restore, "r", false, "restore storage server")
 	flag.StringVar(&serverConfig.DSN, "d", "", "database connection string")
 	flag.StringVar(&serverConfig.Key, "k", "", "key SHA256")
+	flag.StringVar(&serverConfig.AuditFile, "audit-file", "", "audit file")
+	flag.StringVar(&serverConfig.AuditURL, "audit-url", "", "audit url")
 	flag.Parse()
 
 	if err := env.Parse(&serverConfig); err != nil {

@@ -4,17 +4,45 @@ import (
 	"compress/gzip"
 	"io"
 	"net/http"
+	"sync"
 )
 
+type Pool[T any] struct {
+	sync.Pool
+}
+
+func (p *Pool[T]) Get() T {
+	return p.Pool.Get().(T)
+}
+
+func (p *Pool[T]) Put(x T) {
+	p.Pool.Put(x)
+}
+
+func NewPool[T any](newF func() T) *Pool[T] {
+	return &Pool[T]{
+		Pool: sync.Pool{
+			New: func() interface{} {
+				return newF()
+			},
+		},
+	}
+}
+
+var gzipPool = NewPool(func() *gzip.Writer {
+	w, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
+	return w
+})
+
 type compressWriter struct {
-	w  http.ResponseWriter
-	zw *gzip.Writer
+	w           http.ResponseWriter
+	zw          *gzip.Writer
+	wroteHeader bool
 }
 
 func NewCompressWriter(w http.ResponseWriter) *compressWriter {
 	return &compressWriter{
-		w:  w,
-		zw: gzip.NewWriter(w),
+		w: w,
 	}
 }
 
@@ -22,17 +50,48 @@ func (c *compressWriter) Header() http.Header {
 	return c.w.Header()
 }
 
-func (c *compressWriter) Write(p []byte) (int, error) {
-	return c.zw.Write(p)
-}
-
 func (c *compressWriter) WriteHeader(statusCode int) {
+	if c.wroteHeader {
+		return
+	}
+	c.wroteHeader = true
+
+	c.w.Header().Set("Content-Encoding", "gzip")
+	c.w.Header().Del("Content-Length")
+
 	c.w.WriteHeader(statusCode)
 }
 
-// Close закрывает gzip.Writer и досылает все данные из буфера.
+func (c *compressWriter) initWriter() {
+	if c.zw != nil {
+		return
+	}
+
+	zw := gzipPool.Get()
+	zw.Reset(c.w)
+	c.zw = zw
+}
+
+func (c *compressWriter) Write(p []byte) (int, error) {
+	if !c.wroteHeader {
+		c.WriteHeader(http.StatusOK)
+	}
+
+	c.initWriter()
+	return c.zw.Write(p)
+}
+
 func (c *compressWriter) Close() error {
-	return c.zw.Close()
+	if c.zw == nil {
+		return nil
+	}
+
+	err := c.zw.Close()
+
+	c.zw.Reset(io.Discard)
+	gzipPool.Put(c.zw)
+
+	return err
 }
 
 // compressReader реализует интерфейс io.ReadCloser и позволяет прозрачно для сервера

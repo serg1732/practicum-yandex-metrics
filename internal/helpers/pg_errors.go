@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// ErrorClassification тип для классификации ошибок
+// PGErrorClassification тип для классификации ошибок
 type PGErrorClassification int
 
 const (

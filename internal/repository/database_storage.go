@@ -19,6 +19,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// BuildDataBase инициализация подключения к БД.
 func BuildDataBase(ctx context.Context, log *slog.Logger, config *config.ServerConfig) (*DataBase, error) {
 	if config.DSN == "" {
 		return nil, errors.New("DSL required")
@@ -37,6 +38,7 @@ func BuildDataBase(ctx context.Context, log *slog.Logger, config *config.ServerC
 	return &DataBase{database: db}, nil
 }
 
+// MigrateDataBase миграция данных до последней версии.
 func MigrateDataBase(log *slog.Logger, config *config.ServerConfig) error {
 	if config.DSN == "" {
 		log.Error("Конфиг ДБ пустой")
@@ -72,14 +74,17 @@ type Pool interface {
 	Close()
 }
 
+// DataBase База данных Postgresql.
 type DataBase struct {
 	database Pool
 }
 
+// Ping проверка подключения к БД.
 func (db *DataBase) Ping(ctx context.Context) error {
 	return db.database.Ping(ctx)
 }
 
+// Update запрос в БД на добавление / обновление данных.
 func (db *DataBase) Update(ctx context.Context, log *slog.Logger, Data *models.Metrics) error {
 	return db.retry(ctx, func(tx pgx.Tx) error {
 		query := `
@@ -108,6 +113,7 @@ func (db *DataBase) Update(ctx context.Context, log *slog.Logger, Data *models.M
 	})
 }
 
+// Updates запрос в БД на добавление / обновление набора данных.
 func (db *DataBase) Updates(ctx context.Context, log *slog.Logger, Data []*models.Metrics) error {
 	return db.retry(ctx, func(tx pgx.Tx) error {
 		query := `
@@ -144,6 +150,7 @@ func (db *DataBase) Updates(ctx context.Context, log *slog.Logger, Data []*model
 	})
 }
 
+// GetCounter получение значения метрики с типом counter.
 func (db *DataBase) GetCounter(ctx context.Context, name string) (*models.Metrics, error) {
 	var row pgx.Row
 	var metrics models.Metrics
@@ -164,6 +171,8 @@ func (db *DataBase) GetCounter(ctx context.Context, name string) (*models.Metric
 	}
 	return &metrics, nil
 }
+
+// GetGauge получение значения метрики с типом gauge.
 func (db *DataBase) GetGauge(ctx context.Context, name string) (*models.Metrics, error) {
 	var row pgx.Row
 	var metrics models.Metrics
@@ -185,6 +194,8 @@ func (db *DataBase) GetGauge(ctx context.Context, name string) (*models.Metrics,
 
 	return &metrics, nil
 }
+
+// GetAllCounters получение всех метрик из БД с типом counter.
 func (db *DataBase) GetAllCounters(ctx context.Context) (map[string]*models.Metrics, error) {
 	counters := make(map[string]*models.Metrics)
 	errRetry := db.retry(ctx, func(tx pgx.Tx) error {
@@ -210,6 +221,8 @@ func (db *DataBase) GetAllCounters(ctx context.Context) (map[string]*models.Metr
 	})
 	return counters, errRetry
 }
+
+// GetAllGauges получение всех метрик из БД с типом gauge.
 func (db *DataBase) GetAllGauges(ctx context.Context) (map[string]*models.Metrics, error) {
 	gauges := make(map[string]*models.Metrics)
 	errRetry := db.retry(ctx, func(tx pgx.Tx) error {
@@ -239,6 +252,7 @@ func (db *DataBase) GetAllGauges(ctx context.Context) (map[string]*models.Metric
 	return gauges, nil
 }
 
+// retry функционал попытки отправить повторно запрос, если ошибка из списка Retriable.
 func (db *DataBase) retry(ctx context.Context, fn func(pgx.Tx) error) error {
 	const maxRetries = 3
 	delay := 1
