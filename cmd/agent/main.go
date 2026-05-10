@@ -18,7 +18,7 @@ func main() {
 
 	if errConfig != nil {
 		log.Error("Ошибка парсинга flag/env значений", "error", errConfig.Error())
-		os.Exit(1)
+		return
 	}
 
 	ctx, stop := signal.NotifyContext(
@@ -33,7 +33,7 @@ func main() {
 		agent := service.BuildCollector()
 		if err := agent.Run(ctx, log, *agentConfig); err != nil {
 			log.Error("Ошибка сборщика метрика", "error", err.Error())
-			os.Exit(1)
+			return
 		}
 	}(ctx)
 

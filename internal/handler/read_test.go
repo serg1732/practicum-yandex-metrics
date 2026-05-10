@@ -27,63 +27,70 @@ func TestAllGetHandler(t *testing.T) {
 
 	handlerBuilder := BuildReadHandler(mockRepo)
 	testData := []struct {
-		name            string
-		expectedStatus  int
 		expectedCounter map[string]*models.Metrics
 		expectedGauges  map[string]*models.Metrics
+		name            string
+		expectedStatus  int
 	}{
-		{"test 1",
-			http.StatusOK,
-			map[string]*models.Metrics{
+		{
+			expectedCounter: map[string]*models.Metrics{
 				"test-counter": {
 					ID:    "test-counter",
 					MType: "counter",
 					Delta: getPtr(rand.Int64()),
 				},
 			},
-			map[string]*models.Metrics{
+			expectedGauges: map[string]*models.Metrics{
 				"test-gauge": {
 					ID:    "test-gauge",
 					MType: "gauge",
 					Value: getPtr(rand.Float64()),
 				},
 			},
+			name:           "test 1",
+			expectedStatus: http.StatusOK,
 		},
-		{"test 2",
-			http.StatusOK,
-			map[string]*models.Metrics{
+		{
+			expectedCounter: map[string]*models.Metrics{
 				"test-counter": {
 					ID:    "test-counter",
 					MType: "counter",
 					Delta: getPtr(rand.Int64()),
 				},
 			},
-			map[string]*models.Metrics{},
+			expectedGauges: map[string]*models.Metrics{},
+			name:           "test 2",
+			expectedStatus: http.StatusOK,
 		},
-		{"test 3",
-			http.StatusOK,
-			map[string]*models.Metrics{},
-			map[string]*models.Metrics{
+		{
+			expectedCounter: map[string]*models.Metrics{},
+			expectedGauges: map[string]*models.Metrics{
 				"test-gauge": {
 					ID:    "test-gauge",
 					MType: "gauge",
 					Value: getPtr(rand.Float64()),
-				}},
+				},
+			},
+			name:           "test 3",
+			expectedStatus: http.StatusOK,
 		},
-		{"test 4",
-			http.StatusOK,
-			map[string]*models.Metrics{},
-			map[string]*models.Metrics{},
+		{
+			expectedCounter: map[string]*models.Metrics{},
+			expectedGauges:  map[string]*models.Metrics{},
+			name:            "test 4",
+			expectedStatus:  http.StatusOK,
 		},
-		{"test 5",
-			http.StatusOK,
-			map[string]*models.Metrics{},
-			nil,
+		{
+			expectedCounter: map[string]*models.Metrics{},
+			expectedGauges:  nil,
+			name:            "test 5",
+			expectedStatus:  http.StatusOK,
 		},
-		{"test 6",
-			http.StatusOK,
-			nil,
-			map[string]*models.Metrics{},
+		{
+			expectedCounter: nil,
+			expectedGauges:  map[string]*models.Metrics{},
+			name:            "test 6",
+			expectedStatus:  http.StatusOK,
 		},
 	}
 
@@ -101,7 +108,7 @@ func TestAllGetHandler(t *testing.T) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("GET /", handlerBuilder.AllMetricsHandler(slog.Default()))
 			rr := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", "/", nil)
+			req := httptest.NewRequestWithContext(t.Context(), "GET", "/", nil)
 			mux.ServeHTTP(rr, req)
 
 			assert.Equal(t, td.expectedStatus, rr.Code)
@@ -120,56 +127,56 @@ func TestSelectReadServerHandler(t *testing.T) {
 	handlerBuilder := BuildReadHandler(mockRepo)
 
 	testData := []struct {
+		repoCounterValue *models.Metrics
+		repoGaugesValue  *models.Metrics
+		err              error
 		name             string
 		url              string
-		err              error
-		expectedStatus   int
 		repoCounterKey   string
-		repoCounterValue *models.Metrics
 		repoGaugesKey    string
-		repoGaugesValue  *models.Metrics
+		expectedStatus   int
 	}{
 		{
+			err:            repository.ErrorMetricNotFound,
 			name:           "test 1 not found",
 			url:            "/value/counter/test1",
-			expectedStatus: http.StatusNotFound,
 			repoCounterKey: "test1",
-			err:            repository.ErrorMetricNotFound,
+			expectedStatus: http.StatusNotFound,
 		},
 		{
+			err:            repository.ErrorMetricNotFound,
 			name:           "test 2 not found",
 			url:            "/value/gauge/test2",
-			expectedStatus: http.StatusNotFound,
 			repoGaugesKey:  "test2",
-			err:            repository.ErrorMetricNotFound,
+			expectedStatus: http.StatusNotFound,
 		},
 		{
+			err:            repository.ErrorMetricNotFound,
 			name:           "test 3 bad type",
 			url:            "/value/hunter/test",
 			expectedStatus: http.StatusNotFound,
-			err:            repository.ErrorMetricNotFound,
 		},
 		{
-			name:           "test 4 success counter",
-			url:            "/value/counter/test4",
-			expectedStatus: http.StatusOK,
-			repoCounterKey: "test4",
 			repoCounterValue: &models.Metrics{
 				ID:    "test4",
 				MType: "counter",
 				Delta: getPtr(rand.Int64()),
 			},
+			name:           "test 4 success counter",
+			url:            "/value/counter/test4",
+			repoCounterKey: "test4",
+			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "test 5 success gauges",
-			url:            "/value/gauge/test5",
-			expectedStatus: http.StatusOK,
-			repoGaugesKey:  "test5",
 			repoGaugesValue: &models.Metrics{
 				ID:    "test5",
 				MType: "gauge",
 				Value: getPtr(rand.Float64()),
 			},
+			name:           "test 5 success gauges",
+			url:            "/value/gauge/test5",
+			repoGaugesKey:  "test5",
+			expectedStatus: http.StatusOK,
 		},
 	}
 
@@ -187,7 +194,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 			r := chi.NewRouter()
 			r.HandleFunc("GET /value/{metricType}/{metricName}", handlerBuilder.SelectMetricHandler(slog.Default()))
 			rr := httptest.NewRecorder()
-			req := httptest.NewRequest("GET", td.url, nil)
+			req := httptest.NewRequestWithContext(t.Context(), "GET", td.url, nil)
 			r.ServeHTTP(rr, req)
 
 			assert.Equal(t, td.expectedStatus, rr.Code)

@@ -47,13 +47,13 @@ func main() {
 		db, err := repository.BuildDataBase(ctx, log, serverConfig)
 		if err != nil {
 			log.Error("Ошибка подключения к БД", "error", err)
-			os.Exit(1)
+			return
 		}
 
 		errMigrate := repository.MigrateDataBase(log, serverConfig)
 		if errMigrate != nil {
 			log.Error("Ошибка при миграции", "error", errMigrate)
-			os.Exit(1)
+			return
 		}
 		updaterHandler := handler.BuildUpdateHandler(db, &audit)
 		readHandlers := handler.BuildReadHandler(db)
