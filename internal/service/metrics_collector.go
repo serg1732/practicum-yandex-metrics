@@ -35,6 +35,7 @@ func BuildCollector() Collector {
 	}
 }
 
+// generate:reset
 // CollectorImpl агент-сборщик метрик.
 type CollectorImpl struct {
 	// lastUpdateMetrics сохраняет / обновляет собираемые метрики.
