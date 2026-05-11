@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -20,7 +21,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+var buildVersion string
+var buildDate string
+var buildCommit string
+
 func main() {
+	printBuildInfo()
 	log := logger.NewSlogLogger(slog.LevelInfo)
 	serverConfig, errConfig := config.GetSeverConfig()
 	if errConfig != nil {
@@ -119,4 +125,18 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 	router.Get("/ping", readHandlers.PingDatabase(log, db))
 	router.Get("/", readHandlers.AllMetricsHandler(log))
 	return router
+}
+
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\n", valueOrNA(buildVersion))
+	fmt.Printf("Build date: %s\n", valueOrNA(buildDate))
+	fmt.Printf("Build commit: %s\n", valueOrNA(buildCommit))
+}
+
+func valueOrNA(value string) string {
+	if value == "" {
+		return "N/A"
+	}
+
+	return value
 }
