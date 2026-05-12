@@ -9,6 +9,7 @@ import (
 	"github.com/timakin/bodyclose/passes/bodyclose"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/multichecker"
+	"golang.org/x/tools/go/ast/astutil"
 
 	"golang.org/x/tools/go/analysis/passes/asmdecl"
 	"golang.org/x/tools/go/analysis/passes/assign"
@@ -47,55 +48,99 @@ import (
 	"honnef.co/go/tools/stylecheck"
 )
 
-var noOsExitInMainAnalyzer = &analysis.Analyzer{
-	Name: "noosexitinmain",
-	Doc:  "reports direct os.Exit calls in func main of package main",
-	Run:  runNoOsExitInMain,
+var forbiddenCallsOutsideMainAnalyzer = &analysis.Analyzer{
+	Name: "forbiddenCallsOutsideMain",
+	Doc:  "проверка на os.Exit() и fatal / panic вне функции main",
+	Run:  runForbiddenCallsOutsideMain,
 }
 
-func runNoOsExitInMain(pass *analysis.Pass) (interface{}, error) {
-	if pass.Pkg.Name() != "main" {
-		return nil, nil
-	}
-
+func runForbiddenCallsOutsideMain(pass *analysis.Pass) (interface{}, error) {
 	for _, file := range pass.Files {
 		if ast.IsGenerated(file) {
 			continue
 		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			fn, ok := n.(*ast.FuncDecl)
-			if !ok || fn.Name.Name != "main" || fn.Recv != nil {
-				return true
+
+		var funcStack []bool
+
+		astutil.Apply(file, func(cursor *astutil.Cursor) bool {
+			switch n := cursor.Node().(type) {
+			case *ast.FuncDecl:
+				isRealMain := pass.Pkg.Name() == "main" &&
+					n.Recv == nil &&
+					n.Name.Name == "main"
+
+				funcStack = append(funcStack, isRealMain)
+
+			case *ast.FuncLit:
+				funcStack = append(funcStack, false)
+
+			case *ast.CallExpr:
+				if isInsideRealMain(funcStack) {
+					return true
+				}
+
+				if name := forbiddenCallName(pass, n); name != "" {
+					pass.Reportf(n.Pos(), "запрещенный вызов %s вне функции main", name)
+				}
 			}
 
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
+			return true
+		}, func(cursor *astutil.Cursor) bool {
+			switch cursor.Node().(type) {
+			case *ast.FuncDecl, *ast.FuncLit:
+				funcStack = funcStack[:len(funcStack)-1]
+			}
 
-				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok || sel.Sel.Name != "Exit" {
-					return true
-				}
-
-				obj, ok := pass.TypesInfo.Uses[sel.Sel].(*types.Func)
-				if !ok || obj.Pkg() == nil {
-					return true
-				}
-
-				if obj.Pkg().Path() == "os" && obj.Name() == "Exit" {
-					pass.Reportf(call.Pos(), "проверка на использование os.Exit() не пройдена")
-				}
-
-				return true
-			})
-
-			return false
+			return true
 		})
 	}
 
 	return nil, nil
+}
+
+func isInsideRealMain(funcStack []bool) bool {
+	return len(funcStack) > 0 && funcStack[len(funcStack)-1]
+}
+
+func forbiddenCallName(pass *analysis.Pass, call *ast.CallExpr) string {
+	switch fun := call.Fun.(type) {
+	case *ast.Ident:
+		obj := pass.TypesInfo.Uses[fun]
+
+		builtin, ok := obj.(*types.Builtin)
+		if ok && builtin.Name() == "panic" {
+			return "panic"
+		}
+
+	case *ast.SelectorExpr:
+		obj, ok := pass.TypesInfo.Uses[fun.Sel].(*types.Func)
+		if !ok || obj.Pkg() == nil {
+			return ""
+		}
+
+		switch obj.Pkg().Path() {
+		case "os":
+			if obj.Name() == "Exit" {
+				return "os.Exit"
+			}
+
+		case "log":
+			if isLogFatal(obj.Name()) {
+				return "log." + obj.Name()
+			}
+		}
+	}
+
+	return ""
+}
+
+func isLogFatal(name string) bool {
+	switch name {
+	case "Fatal", "Fatalf", "Fatalln":
+		return true
+	default:
+		return false
+	}
 }
 
 func main() {
@@ -132,7 +177,7 @@ func main() {
 		unsafeptr.Analyzer,
 		unusedresult.Analyzer,
 
-		noOsExitInMainAnalyzer,
+		forbiddenCallsOutsideMainAnalyzer,
 
 		bodyclose.Analyzer,
 		noctx.Analyzer,

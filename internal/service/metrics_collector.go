@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"math/rand"
-	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -180,7 +179,7 @@ func updater(ctx context.Context, log *slog.Logger, config config.AgentConfig,
 			data, err := getMetricsFunc()
 			if err != nil {
 				log.Error("ошибка получения метрик", "error", err)
-				os.Exit(1)
+				return
 			}
 			metrics <- data
 		}

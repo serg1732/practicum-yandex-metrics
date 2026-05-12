@@ -13,9 +13,9 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/service"
 )
 
-var buildVersion string
-var buildDate string
-var buildCommit string
+var buildVersion = "N/A"
+var buildDate = "N/A"
+var buildCommit = "N/A"
 
 func main() {
 	printBuildInfo()
@@ -24,7 +24,7 @@ func main() {
 
 	if errConfig != nil {
 		log.Error("Ошибка парсинга flag/env значений", "error", errConfig.Error())
-		return
+		os.Exit(1)
 	}
 
 	ctx, stop := signal.NotifyContext(
@@ -47,15 +47,7 @@ func main() {
 }
 
 func printBuildInfo() {
-	fmt.Printf("Build version: %s\n", valueOrNA(buildVersion))
-	fmt.Printf("Build date: %s\n", valueOrNA(buildDate))
-	fmt.Printf("Build commit: %s\n", valueOrNA(buildCommit))
-}
-
-func valueOrNA(value string) string {
-	if value == "" {
-		return "N/A"
-	}
-
-	return value
+	fmt.Printf("Build version: %s\n", buildVersion)
+	fmt.Printf("Build date: %s\n", buildDate)
+	fmt.Printf("Build commit: %s\n", buildCommit)
 }
