@@ -71,7 +71,7 @@ func TestUpdateServerHandler(t *testing.T) {
 
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
-			req, errBuildRequest := http.NewRequest(td.method, td.url, nil)
+			req, errBuildRequest := http.NewRequestWithContext(t.Context(), td.method, td.url, nil)
 			client := http.Client{}
 			resp, err := client.Do(req)
 			if err != nil {
@@ -129,63 +129,70 @@ func TestAllReadServerHandler(t *testing.T) {
 	defer srv.Close()
 
 	testData := []struct {
-		name            string
-		expectedStatus  int
 		expectedCounter map[string]*models.Metrics
 		expectedGauges  map[string]*models.Metrics
+		name            string
+		expectedStatus  int
 	}{
-		{"test 1",
-			http.StatusOK,
-			map[string]*models.Metrics{
+		{
+			expectedCounter: map[string]*models.Metrics{
 				"test-counter": {
 					ID:    "test-counter",
 					MType: models.Counter,
 					Delta: getPtr(rand.Int64()),
 				},
 			},
-			map[string]*models.Metrics{
+			expectedGauges: map[string]*models.Metrics{
 				"test-gauge": {
 					ID:    "test-gauge",
 					MType: models.Gauge,
 					Value: getPtr(rand.Float64()),
 				},
 			},
+			name:           "test 1",
+			expectedStatus: http.StatusOK,
 		},
-		{"test 2",
-			http.StatusOK,
-			map[string]*models.Metrics{
+		{
+			expectedCounter: map[string]*models.Metrics{
 				"test-counter": {
 					ID:    "test-counter",
 					MType: models.Counter,
 					Delta: getPtr(rand.Int64()),
 				},
 			},
-			map[string]*models.Metrics{},
+			expectedGauges: map[string]*models.Metrics{},
+			name:           "test 2",
+			expectedStatus: http.StatusOK,
 		},
-		{"test 3",
-			http.StatusOK,
-			map[string]*models.Metrics{},
-			map[string]*models.Metrics{
+		{
+			expectedCounter: map[string]*models.Metrics{},
+			expectedGauges: map[string]*models.Metrics{
 				"test-gauge": {
 					ID:    "test-gauge",
 					MType: models.Gauge,
 					Value: getPtr(rand.Float64()),
-				}},
+				},
+			},
+			name:           "test 3",
+			expectedStatus: http.StatusOK,
 		},
-		{"test 4",
-			http.StatusOK,
-			map[string]*models.Metrics{},
-			map[string]*models.Metrics{},
+		{
+			expectedCounter: map[string]*models.Metrics{},
+			expectedGauges:  map[string]*models.Metrics{},
+			name:            "test 4",
+			expectedStatus:  http.StatusOK,
 		},
-		{"test 5",
-			http.StatusOK,
-			map[string]*models.Metrics{},
-			nil,
+		{
+			expectedCounter: map[string]*models.Metrics{},
+			expectedGauges:  nil,
+			name:            "test 5",
+			expectedStatus:  http.StatusOK,
 		},
-		{"test 6",
-			http.StatusOK,
-			nil,
-			map[string]*models.Metrics{},
+		{
+			expectedCounter: nil,
+			expectedGauges:  map[string]*models.Metrics{},
+			name:            "test 6",
+			expectedStatus:  http.StatusOK,
 		},
 	}
 
@@ -199,13 +206,20 @@ func TestAllReadServerHandler(t *testing.T) {
 				EXPECT().
 				GetAllGauges(gomock.Any()).
 				Return(td.expectedGauges, nil)
-			resp, err := http.DefaultClient.Get(srv.URL)
+			req, errCreateReq := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodGet,
+				srv.URL,
+				nil,
+			)
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				assert.Nil(t, err)
 			}
 			defer resp.Body.Close()
 			respBody, _ := io.ReadAll(resp.Body)
 
+			assert.NoError(t, errCreateReq)
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
 			expectedPage, err := getExpectedPage(t, templateHTML, td.expectedCounter, td.expectedGauges)
 			assert.NoError(t, err)
@@ -228,58 +242,58 @@ func TestSelectReadServerHandler(t *testing.T) {
 	defer srv.Close()
 
 	testData := []struct {
-		name             string
-		url              string
-		expectedStatus   int
-		repoCounterKey   string
 		repoCounterValue *models.Metrics
-		repoGaugesKey    string
 		repoGaugesValue  *models.Metrics
 		err              error
+		name             string
+		url              string
+		repoCounterKey   string
+		repoGaugesKey    string
+		expectedStatus   int
 	}{
 		{
+			err:            repository.ErrorMetricNotFound,
 			name:           "test 1 not found",
 			url:            "/value/counter/test1",
-			expectedStatus: http.StatusNotFound,
 			repoCounterKey: "test1",
-			err:            repository.ErrorMetricNotFound,
+			expectedStatus: http.StatusNotFound,
 		},
 		{
+			err:            repository.ErrorMetricNotFound,
 			name:           "test 2 not found",
 			url:            "/value/gauge/test2",
-			expectedStatus: http.StatusNotFound,
 			repoGaugesKey:  "test2",
-			err:            repository.ErrorMetricNotFound,
+			expectedStatus: http.StatusNotFound,
 		},
 		{
+			err:            repository.ErrorMetricNotFound,
 			name:           "test 3 bad type",
 			url:            "/value/hunter/test",
 			expectedStatus: http.StatusNotFound,
-			err:            repository.ErrorMetricNotFound,
 		},
 		{
-			name:           "test 4",
-			url:            "/value/counter/test4",
-			expectedStatus: http.StatusOK,
-			repoCounterKey: "test4",
-			err:            nil,
 			repoCounterValue: &models.Metrics{
 				ID:    "test4",
 				MType: models.Counter,
 				Delta: getPtr(rand.Int64()),
 			},
+			err:            nil,
+			name:           "test 4",
+			url:            "/value/counter/test4",
+			repoCounterKey: "test4",
+			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "test 5",
-			url:            "/value/gauge/test5",
-			expectedStatus: http.StatusOK,
-			repoGaugesKey:  "test5",
-			err:            nil,
 			repoGaugesValue: &models.Metrics{
 				ID:    "test5",
 				MType: models.Gauge,
 				Value: getPtr(rand.Float64()),
 			},
+			err:            nil,
+			name:           "test 5",
+			url:            "/value/gauge/test5",
+			repoGaugesKey:  "test5",
+			expectedStatus: http.StatusOK,
 		},
 	}
 
@@ -294,13 +308,21 @@ func TestSelectReadServerHandler(t *testing.T) {
 				GetGauge(gomock.Any(), gomock.Eq(td.repoGaugesKey)).
 				Return(td.repoGaugesValue, td.err).AnyTimes()
 
-			resp, err := http.DefaultClient.Get(srv.URL + td.url)
+			req, errCreateReq := http.NewRequestWithContext(
+				t.Context(),
+				http.MethodGet,
+				srv.URL+td.url,
+				nil,
+			)
+
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil && !errors.Is(err, td.err) {
 				assert.Nil(t, err)
 			}
 			defer resp.Body.Close()
 			respBody, _ := io.ReadAll(resp.Body)
 
+			assert.NoError(t, errCreateReq)
 			assert.Equal(t, td.expectedStatus, resp.StatusCode)
 			if resp.StatusCode == http.StatusOK {
 				if td.repoCounterValue != nil {

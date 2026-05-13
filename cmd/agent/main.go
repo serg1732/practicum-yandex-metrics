@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -12,7 +13,12 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/service"
 )
 
+var buildVersion = "N/A"
+var buildDate = "N/A"
+var buildCommit = "N/A"
+
 func main() {
+	printBuildInfo()
 	log := logger.NewSlogLogger(slog.LevelInfo)
 	agentConfig, errConfig := config.GetAgentConfig()
 
@@ -33,9 +39,15 @@ func main() {
 		agent := service.BuildCollector()
 		if err := agent.Run(ctx, log, *agentConfig); err != nil {
 			log.Error("Ошибка сборщика метрика", "error", err.Error())
-			os.Exit(1)
+			return
 		}
 	}(ctx)
 
 	<-ctx.Done()
+}
+
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\n", buildVersion)
+	fmt.Printf("Build date: %s\n", buildDate)
+	fmt.Printf("Build commit: %s\n", buildCommit)
 }

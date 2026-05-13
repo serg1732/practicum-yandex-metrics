@@ -2,9 +2,7 @@ package handler
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,28 +17,51 @@ import (
 func TestUpdateHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
 	mockAuditor := mocks.NewMockAuditor(ctrl)
 
-	handlerBuilder := BuildUpdateHandler(repository.BuildMemStorage(context.Background(), slog.Default(),
-		&config.ServerConfig{}), mockAuditor)
+	handlerBuilder := BuildUpdateHandler(
+		repository.BuildMemStorage(
+			context.Background(),
+			slog.Default(),
+			&config.ServerConfig{},
+		),
+		mockAuditor,
+	)
+
 	testData := []struct {
-		name           string
 		req            *http.Request
+		name           string
 		expectedStatus int
 	}{
 		{
-			name:           "test 1",
-			req:            httptest.NewRequest("POST", fmt.Sprintf("/update/%f/%f/%f", rand.Float64(), rand.Float64(), rand.Float64()), nil),
+			req: httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/update/unknown/metric/123",
+				nil,
+			),
+			name:           "bad metric type",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:           "test 2",
-			req:            httptest.NewRequest("POST", fmt.Sprintf("/update/%s/%s/%v", "gauge", "metric", rand.Float64()), nil),
+			req: httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/update/gauge/metric/123.45",
+				nil,
+			),
+			name:           "gauge ok",
 			expectedStatus: http.StatusOK,
 		},
 		{
-			name:           "test 3",
-			req:            httptest.NewRequest("POST", fmt.Sprintf("/update/%s/%s/%v", "counter", "metric", rand.Int63()), nil),
+			req: httptest.NewRequestWithContext(
+				t.Context(),
+				http.MethodPost,
+				"/update/counter/metric/10",
+				nil,
+			),
+			name:           "counter ok",
 			expectedStatus: http.StatusOK,
 		},
 	}
@@ -48,12 +69,22 @@ func TestUpdateHandler(t *testing.T) {
 	for _, td := range testData {
 		t.Run(td.name, func(t *testing.T) {
 			if td.expectedStatus == http.StatusOK {
-				mockAuditor.EXPECT().BroadCast(gomock.Any(), gomock.Any()).Times(1)
+				mockAuditor.EXPECT().
+					BroadCast(gomock.Any(), gomock.Any()).
+					Times(1)
 			}
+
 			mux := http.NewServeMux()
-			mux.HandleFunc("POST /update/{metricType}/{metricName}/{metricValue}", handlerBuilder.UpdatePathValuesHandler(slog.Default()))
+
+			mux.HandleFunc(
+				"POST /update/{metricType}/{metricName}/{metricValue}",
+				handlerBuilder.UpdatePathValuesHandler(slog.Default()),
+			)
+
 			rr := httptest.NewRecorder()
+
 			mux.ServeHTTP(rr, td.req)
+
 			assert.Equal(t, td.expectedStatus, rr.Code)
 		})
 	}

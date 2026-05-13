@@ -20,28 +20,28 @@ func TestUpdateGauge(t *testing.T) {
 		})
 
 	testData := []struct {
-		name  string
 		gauge *models.Metrics
+		name  string
 	}{
 		{
-			name:  "test1",
 			gauge: &models.Metrics{ID: "test1", MType: models.Gauge, Value: nil},
+			name:  "test1",
 		},
 		{
-			name:  "test2",
 			gauge: &models.Metrics{ID: "test2", MType: models.Gauge, Value: new(float64)},
+			name:  "test2",
 		},
 		{
-			name: "test3",
 			gauge: &models.Metrics{ID: "test3", MType: models.Gauge, Value: func(f float64) *float64 {
 				return &f
 			}(3.14)},
+			name: "test3",
 		},
 		{
-			name: "test4",
 			gauge: &models.Metrics{ID: "test4", MType: models.Gauge, Value: func(f float64) *float64 {
 				return &f
 			}(3.14)},
+			name: "test4",
 		},
 	}
 
@@ -52,6 +52,7 @@ func TestUpdateGauge(t *testing.T) {
 
 			assert.Nil(t, err)
 			assert.Nil(t, errUpdate)
+
 			if assert.NotNil(t, data.gauge) {
 				assert.Equal(t, data.gauge, val)
 			}
@@ -69,28 +70,28 @@ func TestUpdateCounter(t *testing.T) {
 		})
 
 	testData := []struct {
-		name    string
 		counter *models.Metrics
+		name    string
 	}{
 		{
-			name:    "test1",
 			counter: &models.Metrics{ID: "test1", MType: models.Counter, Delta: nil},
+			name:    "test1",
 		},
 		{
-			name:    "test2",
 			counter: &models.Metrics{ID: "test2", MType: models.Counter, Delta: new(int64)},
+			name:    "test2",
 		},
 		{
-			name: "test3",
 			counter: &models.Metrics{ID: "test3", MType: models.Counter, Delta: func(f int64) *int64 {
 				return &f
 			}(314)},
+			name: "test3",
 		},
 		{
-			name: "test4",
 			counter: &models.Metrics{ID: "test4", MType: models.Counter, Delta: func(f int64) *int64 {
 				return &f
 			}(-314)},
+			name: "test4",
 		},
 	}
 
@@ -98,8 +99,10 @@ func TestUpdateCounter(t *testing.T) {
 		t.Run(data.name, func(t *testing.T) {
 			errUpdate := memStorage.Update(t.Context(), slog.Default(), data.counter)
 			val, err := memStorage.GetCounter(t.Context(), data.name)
+
 			assert.Nil(t, err)
 			assert.Nil(t, errUpdate)
+
 			if assert.NotNil(t, data.counter) {
 				assert.Equal(t, data.counter, val)
 			}

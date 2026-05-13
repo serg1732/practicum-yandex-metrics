@@ -82,7 +82,7 @@ func ExampleReadMetricsHandlerImpl_SelectMetricHandler_counter() {
 	r := chi.NewRouter()
 	r.Get("/value/{metricType}/{metricName}", h.SelectMetricHandler(log))
 
-	req := httptest.NewRequest(http.MethodGet, "/value/counter/PollCount", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/value/counter/PollCount", nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -112,7 +112,7 @@ func ExampleReadMetricsHandlerImpl_SelectMetricHandler_gauge() {
 	r := chi.NewRouter()
 	r.Get("/value/{metricType}/{metricName}", h.SelectMetricHandler(log))
 
-	req := httptest.NewRequest(http.MethodGet, "/value/gauge/Alloc", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/value/gauge/Alloc", nil)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, req)
@@ -140,7 +140,7 @@ func ExampleReadMetricsHandlerImpl_SelectValueMetricHandler_counter() {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	body := bytes.NewBufferString(`{"id":"PollCount","type":"counter"}`)
-	req := httptest.NewRequest(http.MethodPost, "/value/", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/value/", body)
 	rec := httptest.NewRecorder()
 
 	h.SelectValueMetricHandler(log).ServeHTTP(rec, req)
@@ -168,7 +168,7 @@ func ExampleReadMetricsHandlerImpl_SelectValueMetricHandler_gauge() {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	body := bytes.NewBufferString(`{"id":"Alloc","type":"gauge"}`)
-	req := httptest.NewRequest(http.MethodPost, "/value/", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/value/", body)
 	rec := httptest.NewRecorder()
 
 	h.SelectValueMetricHandler(log).ServeHTTP(rec, req)
@@ -183,7 +183,7 @@ func ExampleReadMetricsHandlerImpl_PingDatabase() {
 	h := BuildReadHandler(exampleReadStorage{})
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", nil)
 	rec := httptest.NewRecorder()
 
 	h.PingDatabase(log, nil).ServeHTTP(rec, req)
@@ -234,7 +234,7 @@ func ExampleUpdateHandlerImpl_UpdatePathValuesHandler_gauge() {
 	handler := BuildUpdateHandler(storage, auditor)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	req := httptest.NewRequest(http.MethodPost, "/update/gauge/Alloc/12.5", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/update/gauge/Alloc/12.5", nil)
 	req.SetPathValue("metricType", "gauge")
 	req.SetPathValue("metricName", "Alloc")
 	req.SetPathValue("metricValue", "12.5")
@@ -263,7 +263,7 @@ func ExampleUpdateHandlerImpl_UpdatePathValuesHandler_counter() {
 	handler := BuildUpdateHandler(storage, auditor)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	req := httptest.NewRequest(http.MethodPost, "/update/counter/PollCount/42", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/update/counter/PollCount/42", nil)
 	req.SetPathValue("metricType", "counter")
 	req.SetPathValue("metricName", "PollCount")
 	req.SetPathValue("metricValue", "42")
@@ -293,7 +293,7 @@ func ExampleUpdateHandlerImpl_UpdateJSONHandler_gauge() {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	body := bytes.NewBufferString(`{"id":"Alloc","type":"gauge","value":12.5}`)
-	req := httptest.NewRequest(http.MethodPost, "/update/", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/update/", body)
 	rec := httptest.NewRecorder()
 
 	handler.UpdateJSONHandler(log).ServeHTTP(rec, req)
@@ -319,7 +319,7 @@ func ExampleUpdateHandlerImpl_UpdateJSONHandler_counter() {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	body := bytes.NewBufferString(`{"id":"PollCount","type":"counter","delta":42}`)
-	req := httptest.NewRequest(http.MethodPost, "/update/", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/update/", body)
 	rec := httptest.NewRecorder()
 
 	handler.UpdateJSONHandler(log).ServeHTTP(rec, req)
@@ -349,7 +349,7 @@ func ExampleUpdateHandlerImpl_UpdateValues() {
 		{"id":"PollCount","type":"counter","delta":42}
 	]`)
 
-	req := httptest.NewRequest(http.MethodPost, "/updates/", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/updates/", body)
 	rec := httptest.NewRecorder()
 
 	handler.UpdateValues(log).ServeHTTP(rec, req)
