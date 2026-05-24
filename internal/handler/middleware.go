@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/compress"
+	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 )
 
 // WithGzipCompress middleware обработчик для сжатия / получение исходных данных.
@@ -114,4 +116,34 @@ func getHash(data []byte, key string) (string, error) {
 	hash := h.Sum(nil)
 
 	return hex.EncodeToString(hash), nil
+}
+
+func WithCrypto(_ *slog.Logger, privateKey *rsa.PrivateKey) func(http.Handler) http.Handler {
+	return func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "read request body", http.StatusBadRequest)
+				return
+			}
+			_ = r.Body.Close()
+
+			if len(body) == 0 {
+				h.ServeHTTP(w, r)
+				return
+			}
+
+			decryptedBody, err := cryptoutils.Decrypt(body, privateKey)
+			if err != nil {
+				http.Error(w, "decrypt request body", http.StatusBadRequest)
+				return
+			}
+
+			r.Body = io.NopCloser(bytes.NewReader(decryptedBody))
+			r.ContentLength = int64(len(decryptedBody))
+
+			h.ServeHTTP(w, r)
+		})
+	}
 }

@@ -20,6 +20,8 @@ type ServerConfig struct {
 	AuditFile string `env:"AUDIT_FILE"`
 	// AuditURL - адрес для отправки событий.
 	AuditURL string `env:"AUDIT_URL"`
+	// CryptoKey ключ асимметричного шифрования
+	CryptoKey string `env:"CRYPTO_KEY"`
 	// StoreInternal - период сохранения метрик в файловом хранилище.
 	StoreInternal int64 `env:"STORE_INTERVAL"`
 	// Restore - флаг загрузки метрик из файлового хранилища.
@@ -37,6 +39,7 @@ func GetSeverConfig() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.Key, "k", "", "key SHA256")
 	flag.StringVar(&serverConfig.AuditFile, "audit-file", "", "audit file")
 	flag.StringVar(&serverConfig.AuditURL, "audit-url", "", "audit url")
+	flag.StringVar(&serverConfig.CryptoKey, "crypto-key", "", "crypto key private")
 	flag.Parse()
 
 	if err := env.Parse(&serverConfig); err != nil {

@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
 
@@ -28,12 +30,22 @@ type UpdaterClient interface {
 // RestyUpdaterClient HTTP клиент обновления метрик на сервере.
 type RestyUpdaterClient struct {
 	httpClient *resty.Client
+	publicKey  *rsa.PublicKey
 	host       string
 }
 
 // BuildRestyUpdaterMetric создание HTTP клиента по обновлению метрик на сервере.
 func BuildRestyUpdaterMetric(host string) UpdaterClient {
 	return RestyUpdaterClient{httpClient: resty.New(), host: host}
+}
+
+// BuildRestyUpdaterMetricWithCrypto создание HTTP клиента по обновлению метрик на сервере с шифрованием.
+func BuildRestyUpdaterMetricWithCrypto(host string, publicKeyPath string) (UpdaterClient, error) {
+	publicKey, err := cryptoutils.LoadPublicKey(publicKeyPath)
+	if err != nil {
+		return nil, err
+	}
+	return RestyUpdaterClient{httpClient: resty.New(), host: host, publicKey: publicKey}, nil
 }
 
 // ExternalUpdateMetrics отправка метрик через url значение.
@@ -115,6 +127,13 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(
 			return errors.New("ошибка конвертации метрики gauge в json")
 		}
 
+		if r.publicKey != nil {
+			jsonMetric, err = cryptoutils.Encrypt(jsonMetric, r.publicKey)
+			if err != nil {
+				return errors.New("ошибка при шифровании сообщения: " + err.Error())
+			}
+		}
+
 		gzipMetric, err := gzipBody(jsonMetric)
 		if err != nil {
 			return errors.New("ошибка сжатия (gzip) метрики")
@@ -177,6 +196,14 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 	jsonMetric, err := json.Marshal(metric)
 	if err != nil {
 		return errors.New("ошибка конвертации метрики gauge в json")
+	}
+
+	if r.publicKey != nil {
+		log.Info("============ ENCRYPT ==================")
+		jsonMetric, err = cryptoutils.Encrypt(jsonMetric, r.publicKey)
+		if err != nil {
+			return errors.New("ошибка при шифровании сообщения: " + err.Error())
+		}
 	}
 
 	gzipMetric, err := gzipBody(jsonMetric)

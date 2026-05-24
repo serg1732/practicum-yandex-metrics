@@ -13,6 +13,8 @@ type AgentConfig struct {
 	RemoteAddr string `env:"ADDRESS"`
 	// Key - проверка hash значений запросов.
 	Key string `env:"KEY"`
+	// CryptoKey ключ асимметричного шифрования
+	CryptoKey string `env:"CRYPTO_KEY"`
 	// ReportInterval - интервал отправки метрик на сервер.
 	ReportInterval int `env:"REPORT_INTERVAL"`
 	// PollInterval - интервал сбора метрик.
@@ -29,6 +31,7 @@ func GetAgentConfig() (*AgentConfig, error) {
 	flag.IntVar(&agentConfig.PollInterval, "p", 2, "interval between polls")
 	flag.StringVar(&agentConfig.Key, "k", "", "key SHA256")
 	flag.IntVar(&agentConfig.RateLimit, "l", runtime.NumCPU(), "rate limit")
+	flag.StringVar(&agentConfig.CryptoKey, "crypto-key", "", "crypto key public")
 	flag.Parse()
 
 	if err := env.Parse(&agentConfig); err != nil {

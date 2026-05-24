@@ -34,7 +34,7 @@ func TestUpdateServerHandler(t *testing.T) {
 	updateHandler := handler.BuildUpdateHandler(storage, nil)
 	readHandlers := handler.BuildReadHandler(storage)
 
-	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, ""))
+	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, &config.ServerConfig{}))
 	defer srv.Close()
 
 	testData := []struct {
@@ -125,7 +125,7 @@ func TestAllReadServerHandler(t *testing.T) {
 		assert.NoError(t, errParseTemplate)
 	}
 
-	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, ""))
+	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, &config.ServerConfig{}))
 	defer srv.Close()
 
 	testData := []struct {
@@ -238,7 +238,7 @@ func TestSelectReadServerHandler(t *testing.T) {
 	updateHandler := handler.BuildUpdateHandler(mockUpdateRepo, nil)
 	readHandlers := handler.BuildReadHandler(mockReadRepo)
 
-	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, ""))
+	srv := httptest.NewServer(buildRouter(slog.Default(), nil, updateHandler, readHandlers, &config.ServerConfig{}))
 	defer srv.Close()
 
 	testData := []struct {

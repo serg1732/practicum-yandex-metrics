@@ -59,7 +59,16 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 
 	chUpdate := make(chan *models.Metrics, agentConfig.RateLimit)
 	for i := 0; i < agentConfig.RateLimit; i++ {
-		go worker(ctx, log, chUpdate, repository.BuildRestyUpdaterMetric("http://"+agentConfig.RemoteAddr), agentConfig.Key)
+		if agentConfig.CryptoKey != "" {
+			agentClient, errBuildClient := repository.BuildRestyUpdaterMetricWithCrypto("http://"+agentConfig.RemoteAddr, agentConfig.CryptoKey)
+			if errBuildClient != nil {
+				return errBuildClient
+			}
+			go worker(ctx, log, chUpdate, agentClient, agentConfig.Key)
+
+		} else {
+			go worker(ctx, log, chUpdate, repository.BuildRestyUpdaterMetric("http://"+agentConfig.RemoteAddr), agentConfig.Key)
+		}
 	}
 	ticker := time.NewTicker(time.Duration(agentConfig.PollInterval) * time.Second)
 	defer ticker.Stop()

@@ -13,6 +13,7 @@ import (
 
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
+	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 	"github.com/serg1732/practicum-yandex-metrics/internal/logger"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/serg1732/practicum-yandex-metrics/internal/service"
@@ -63,13 +64,13 @@ func main() {
 		}
 		updaterHandler := handler.BuildUpdateHandler(db, &audit)
 		readHandlers := handler.BuildReadHandler(db)
-		mux = buildRouter(log, db, updaterHandler, readHandlers, serverConfig.Key)
+		mux = buildRouter(log, db, updaterHandler, readHandlers, serverConfig)
 
 	} else {
 		storage := repository.BuildMemStorage(ctx, log, serverConfig)
 		updaterHandler := handler.BuildUpdateHandler(storage, &audit)
 		readHandlers := handler.BuildReadHandler(storage)
-		mux = buildRouter(log, nil, updaterHandler, readHandlers, serverConfig.Key)
+		mux = buildRouter(log, nil, updaterHandler, readHandlers, serverConfig)
 	}
 
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
@@ -96,7 +97,7 @@ func main() {
 }
 
 func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handler.UpdateHandlerImpl,
-	readHandlers handler.ReadMetricsHandlerImpl, key string) *chi.Mux {
+	readHandlers handler.ReadMetricsHandlerImpl, config *config.ServerConfig) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -105,8 +106,16 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 		})
 	})
 	router.Use(logger.WithLogger(log))
-	router.Use(handler.WithCheckHash(log, key))
+	router.Use(handler.WithCheckHash(log, config.Key))
 	router.Use(handler.WithGzipCompress(log))
+	if config.CryptoKey != "" {
+		if privateKey, err := cryptoutils.LoadPrivateKey(config.CryptoKey); err != nil {
+			log.Error("ошибка при загрузке приватного ключа", "error", err.Error())
+			return nil
+		} else {
+			router.Use(handler.WithCrypto(log, privateKey))
+		}
+	}
 	router.Mount("/debug", middleware.Profiler())
 
 	router.Route("/updates", func(r chi.Router) {
