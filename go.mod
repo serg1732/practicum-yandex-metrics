@@ -15,6 +15,7 @@ require (
 	github.com/pashagolub/pgxmock/v4 v4.9.0
 	github.com/shirou/gopsutil/v4 v4.26.2
 	github.com/sonatard/noctx v0.5.1
+	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/timakin/bodyclose v0.0.0-20260129054331-73d1f95b84b4
 	go.uber.org/mock v0.6.0
