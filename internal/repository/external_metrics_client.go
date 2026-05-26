@@ -40,12 +40,8 @@ func BuildRestyUpdaterMetric(host string) UpdaterClient {
 }
 
 // BuildRestyUpdaterMetricWithCrypto создание HTTP клиента по обновлению метрик на сервере с шифрованием.
-func BuildRestyUpdaterMetricWithCrypto(host string, publicKeyPath string) (UpdaterClient, error) {
-	publicKey, err := cryptoutils.LoadPublicKey(publicKeyPath)
-	if err != nil {
-		return nil, err
-	}
-	return RestyUpdaterClient{httpClient: resty.New(), host: host, publicKey: publicKey}, nil
+func BuildRestyUpdaterMetricWithCrypto(host string, publicKey *rsa.PublicKey) UpdaterClient {
+	return RestyUpdaterClient{httpClient: resty.New(), host: host, publicKey: publicKey}
 }
 
 // ExternalUpdateMetrics отправка метрик через url значение.

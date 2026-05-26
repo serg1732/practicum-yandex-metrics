@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/serg1732/practicum-yandex-metrics/internal/config"
+	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/shirou/gopsutil/v4/cpu"
@@ -56,19 +57,20 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 	chMetricsToSave := make(chan map[string]*models.Metrics)
 	go updater(ctx, log, agentConfig, chMetricsToSave, getRuntimeMetrics)
 	go updater(ctx, log, agentConfig, chMetricsToSave, getAdditionalMetrics)
+	var agentClient repository.UpdaterClient
+	if agentConfig.CryptoKey != "" {
+		if publicKey, err := cryptoutils.LoadPublicKey(agentConfig.CryptoKey); err != nil {
+			return err
+		} else {
+			agentClient = repository.BuildRestyUpdaterMetricWithCrypto("http://"+agentConfig.RemoteAddr, publicKey)
+		}
+	} else {
+		agentClient = repository.BuildRestyUpdaterMetric("http://" + agentConfig.RemoteAddr)
+	}
 
 	chUpdate := make(chan *models.Metrics, agentConfig.RateLimit)
 	for i := 0; i < agentConfig.RateLimit; i++ {
-		if agentConfig.CryptoKey != "" {
-			agentClient, errBuildClient := repository.BuildRestyUpdaterMetricWithCrypto("http://"+agentConfig.RemoteAddr, agentConfig.CryptoKey)
-			if errBuildClient != nil {
-				return errBuildClient
-			}
-			go worker(ctx, log, chUpdate, agentClient, agentConfig.Key)
-
-		} else {
-			go worker(ctx, log, chUpdate, repository.BuildRestyUpdaterMetric("http://"+agentConfig.RemoteAddr), agentConfig.Key)
-		}
+		go worker(ctx, log, chUpdate, agentClient, agentConfig.Key)
 	}
 	ticker := time.NewTicker(time.Duration(agentConfig.PollInterval) * time.Second)
 	defer ticker.Stop()

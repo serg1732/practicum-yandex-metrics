@@ -46,11 +46,9 @@ func applyAgentJSONConfig(cfg *AgentConfig, path string) error {
 	}
 
 	if v, ok := raw["rate_limit"]; ok {
-		seconds, err := parseDurationSeconds(v)
-		if err != nil {
-			return fmt.Errorf("ошибка при парсинге poll_interval: %w", err)
+		if err := json.Unmarshal(v, &cfg.RateLimit); err != nil {
+			return fmt.Errorf("ошибка при парсинге rate_limit: %w", err)
 		}
-		cfg.RateLimit = seconds
 	}
 
 	if v, ok := raw["crypto_key"]; ok {
