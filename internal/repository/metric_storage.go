@@ -48,7 +48,7 @@ func (m *MemStorageRepository) runSaver(log *slog.Logger) {
 		return
 	}
 	go func() {
-		var tick int64 = 1
+		var tick = 1
 		for {
 			select {
 			case <-m.ctx.Done():
