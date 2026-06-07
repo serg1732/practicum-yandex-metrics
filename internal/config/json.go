@@ -113,6 +113,12 @@ func applyServerJSONConfig(cfg *ServerConfig, path string) error {
 		}
 	}
 
+	if v, ok := raw["trusted_subnet"]; ok {
+		if err := json.Unmarshal(v, &cfg.TrustedSubnet); err != nil {
+			return fmt.Errorf("ошибка при парсинге trusted_subnet: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -12,12 +12,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
+
+const xRealIPAddress = "X-Real-IP"
 
 // UpdaterClient представляет интерфейс, отражающий реализацию HTTP клиента по обновлению метрик на сервере.
 type UpdaterClient interface {
@@ -57,9 +61,16 @@ func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounte
 			return errors.New("ошибка отправки метрики gauge")
 		}
 	}
+	agentIp, errGetAddress := getLocalIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
 
-	resp, err := r.httpClient.R().SetHeader("Content-Type", "text/plain").Post(
-		fmt.Sprintf("%s/update/%s/%s/%v", r.host, models.Counter, "PollCount", updateCounter))
+	resp, err := r.httpClient.R().
+		SetHeader(xRealIPAddress, agentIp).
+		SetHeader("Content-Type", "text/plain").
+		Post(fmt.Sprintf("%s/update/%s/%s/%v", r.host, models.Counter, "PollCount", updateCounter))
 	if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
 		log.Debug("Ошибка обновления метрик gauge",
 			slog.String("name", "PollCount"),
@@ -97,9 +108,16 @@ func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(
 		return errHash
 	}
 
+	agentIp, errGetAddress := getLocalIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
+
 	urlModified := fmt.Sprintf("%s/updates/", r.host)
 	resp, err := r.httpClient.R().
 		SetHeader("Content-Encoding", "gzip").
+		SetHeader(xRealIPAddress, agentIp).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("HashSHA256", hash).
 		SetBody(gzipMetric).
@@ -170,8 +188,16 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(
 		log.Error("Ошибка при получении hash значения", "error", errHash)
 		return errHash
 	}
+
+	agentIp, errGetAddress := getLocalIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
+
 	resp, err := r.httpClient.R().
 		SetHeader("Content-Encoding", "gzip").
+		SetHeader(xRealIPAddress, agentIp).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("HashSHA256", hash).
 		SetBody(gzipMetric).
@@ -195,7 +221,7 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 	}
 
 	if r.publicKey != nil {
-		log.Info("============ ENCRYPT ==================")
+		log.Debug("используется шифрование")
 		jsonMetric, err = cryptoutils.Encrypt(jsonMetric, r.publicKey)
 		if err != nil {
 			return errors.New("ошибка при шифровании сообщения: " + err.Error())
@@ -214,8 +240,15 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 		return errHash
 	}
 
+	agentIp, errGetAddress := getLocalIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
+
 	resp, err := r.httpClient.R().
 		SetContext(ctx).
+		SetHeader(xRealIPAddress, agentIp).
 		SetHeader("Content-Encoding", "gzip").
 		SetHeader("Content-Type", "application/json").
 		SetHeader("HashSHA256", hash).
@@ -261,4 +294,51 @@ func getHash(data []byte, key string) (string, error) {
 	hash := h.Sum(nil)
 
 	return hex.EncodeToString(hash), nil
+}
+
+func getLocalIP(serverAddress string) (string, error) {
+	if strings.Contains(serverAddress, "localhost") ||
+		strings.Contains(serverAddress, "127.0.0.1") {
+		return "127.0.0.1", nil
+	}
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", err
+	}
+
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, errAddrs := iface.Addrs()
+		if errAddrs != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok {
+				continue
+			}
+
+			ip := ipNet.IP.To4()
+			if ip == nil {
+				continue
+			}
+
+			if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+				continue
+			}
+
+			return ip.String(), nil
+		}
+	}
+
+	return "", fmt.Errorf("адрес IPv4 не найден")
 }

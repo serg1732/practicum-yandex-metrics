@@ -25,6 +25,8 @@ type ServerConfig struct {
 	CryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
 	// ConfigPath путь до JSON конфига
 	ConfigPath string `env:"CONFIG"`
+	// TrustedSubnet строковое представление бесклассовой адресации (CIDR)
+	TrustedSubnet string `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
 	// StoreInternal - период сохранения метрик в файловом хранилище.
 	StoreInternal int `env:"STORE_INTERVAL" json:"store_internal"`
 	// Restore - флаг загрузки метрик из файлового хранилища.
@@ -43,6 +45,7 @@ func GetSeverConfig() (*ServerConfig, error) {
 		AuditFile:       "",
 		AuditURL:        "",
 		CryptoKey:       "",
+		TrustedSubnet:   "",
 	}
 	path := configPathFromArgs(os.Args)
 	if path != "" {
@@ -62,6 +65,7 @@ func GetSeverConfig() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.CryptoKey, "crypto-key", serverConfig.CryptoKey, "crypto key private")
 	flag.StringVar(&serverConfig.ConfigPath, "c", serverConfig.ConfigPath, "config file path")
 	flag.StringVar(&serverConfig.ConfigPath, "config", serverConfig.ConfigPath, "config file path")
+	flag.StringVar(&serverConfig.TrustedSubnet, "t", serverConfig.TrustedSubnet, "trusted subnet")
 
 	flag.Parse()
 
