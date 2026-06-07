@@ -8,12 +8,15 @@ import (
 	"encoding/hex"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/compress"
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 )
+
+const xRealIPHeaderName = "X-Real-IP"
 
 // WithGzipCompress middleware обработчик для сжатия / получение исходных данных.
 func WithGzipCompress(log *slog.Logger) func(http.Handler) http.Handler {
@@ -146,4 +149,40 @@ func WithCrypto(_ *slog.Logger, privateKey *rsa.PrivateKey) func(http.Handler) h
 			h.ServeHTTP(w, r)
 		})
 	}
+}
+
+func TrustedSubnetMiddleware(trustedSubnet string) (func(http.Handler) http.Handler, error) {
+	if trustedSubnet == "" {
+		return func(next http.Handler) http.Handler {
+			return next
+		}, nil
+	}
+
+	_, ipNet, err := net.ParseCIDR(trustedSubnet)
+	if err != nil {
+		return nil, err
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			realIP := r.Header.Get(xRealIPHeaderName)
+			if realIP == "" {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				return
+			}
+
+			ip := net.ParseIP(realIP)
+			if ip == nil {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				return
+			}
+
+			if !ipNet.Contains(ip) {
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}, nil
 }

@@ -98,6 +98,12 @@ func main() {
 func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handler.UpdateHandlerImpl,
 	readHandlers handler.ReadMetricsHandlerImpl, config *config.ServerConfig) *chi.Mux {
 	router := chi.NewRouter()
+	trustSubnetHandler, errTrustSubnet := handler.TrustedSubnetMiddleware(config.TrustedSubnet)
+	if errTrustSubnet != nil {
+		log.Error("ошибка при инициализации проверки IP адреса", "error", errTrustSubnet)
+		return nil
+	}
+	router.Use(trustSubnetHandler)
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrapWriter := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
