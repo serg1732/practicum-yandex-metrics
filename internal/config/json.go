@@ -63,6 +63,12 @@ func applyAgentJSONConfig(cfg *AgentConfig, path string) error {
 		}
 	}
 
+	if v, ok := raw["grpc_address"]; ok {
+		if err := json.Unmarshal(v, &cfg.GRPCRemoteAddr); err != nil {
+			return fmt.Errorf("ошибка при парсинге grpc_address: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -116,6 +122,12 @@ func applyServerJSONConfig(cfg *ServerConfig, path string) error {
 	if v, ok := raw["trusted_subnet"]; ok {
 		if err := json.Unmarshal(v, &cfg.TrustedSubnet); err != nil {
 			return fmt.Errorf("ошибка при парсинге trusted_subnet: %w", err)
+		}
+	}
+
+	if v, ok := raw["grpc_address"]; ok {
+		if err := json.Unmarshal(v, &cfg.GRPCRunAddr); err != nil {
+			return fmt.Errorf("ошибка при парсинге grpc_address: %w", err)
 		}
 	}
 

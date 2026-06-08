@@ -11,6 +11,8 @@ import (
 type ServerConfig struct {
 	// RunAddr - адрес обработки запросов по работе с метриками в хранилище.
 	RunAddr string `env:"ADDRESS" json:"address"`
+	// GRPCRunAddr - адрес обработки запросов по работе с метриками в хранилище.
+	GRPCRunAddr string `env:"GRPC_ADDRESS" json:"grpc_address"`
 	// FileStoragePath - путь хранилища метрик в файле.
 	FileStoragePath string `env:"FILE_STORAGE_PATH" json:"store_file"`
 	// DSN - подключение к БД.
@@ -37,6 +39,7 @@ type ServerConfig struct {
 func GetSeverConfig() (*ServerConfig, error) {
 	serverConfig := ServerConfig{
 		RunAddr:         "localhost:8080",
+		GRPCRunAddr:     "localhost:8081",
 		StoreInternal:   5,
 		FileStoragePath: "storage.json",
 		Restore:         false,
@@ -55,6 +58,7 @@ func GetSeverConfig() (*ServerConfig, error) {
 		}
 	}
 	flag.StringVar(&serverConfig.RunAddr, "a", serverConfig.RunAddr, "address and port to run server")
+	flag.StringVar(&serverConfig.GRPCRunAddr, "g", serverConfig.GRPCRunAddr, "address and port to run grpc server")
 	flag.IntVar(&serverConfig.StoreInternal, "i", serverConfig.StoreInternal, "time to save file storage server")
 	flag.StringVar(&serverConfig.FileStoragePath, "f", serverConfig.FileStoragePath, "address file storage server")
 	flag.BoolVar(&serverConfig.Restore, "r", serverConfig.Restore, "restore storage server")

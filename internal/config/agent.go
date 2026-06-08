@@ -12,6 +12,8 @@ import (
 type AgentConfig struct {
 	// RemoteAddr - адрес сервера отправки метрик.
 	RemoteAddr string `env:"ADDRESS" json:"address"`
+	// GRPCRemoteAddr - адрес GRPC сервера отправки метрик.
+	GRPCRemoteAddr string `env:"GRPC_ADDRESS" json:"grpc_address"`
 	// Key - проверка hash значений запросов.
 	Key string `env:"KEY" json:"key"`
 	// CryptoKey ключ асимметричного шифрования
@@ -30,6 +32,7 @@ type AgentConfig struct {
 func GetAgentConfig() (*AgentConfig, error) {
 	agentConfig := AgentConfig{
 		RemoteAddr:     "localhost:8080",
+		GRPCRemoteAddr: "localhost:8081",
 		ReportInterval: 10,
 		PollInterval:   2,
 		Key:            "",
@@ -44,6 +47,7 @@ func GetAgentConfig() (*AgentConfig, error) {
 	}
 
 	flag.StringVar(&agentConfig.RemoteAddr, "a", agentConfig.RemoteAddr, "address and port to run server")
+	flag.StringVar(&agentConfig.GRPCRemoteAddr, "g", agentConfig.GRPCRemoteAddr, "address and port to run grpc server")
 	flag.IntVar(&agentConfig.ReportInterval, "r", agentConfig.ReportInterval, "interval between reports")
 	flag.IntVar(&agentConfig.PollInterval, "p", agentConfig.PollInterval, "interval between polls")
 	flag.StringVar(&agentConfig.Key, "k", agentConfig.Key, "key SHA256")

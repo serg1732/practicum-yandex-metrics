@@ -14,6 +14,7 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
+	"github.com/serg1732/practicum-yandex-metrics/internal/service/grpc_client"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )
@@ -67,6 +68,10 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 	} else {
 		agentClient = repository.BuildRestyUpdaterMetric("http://" + agentConfig.RemoteAddr)
 	}
+	grpcClient, errClient := grpc_client.BuildGRPCMetricsClient(log, agentConfig.GRPCRemoteAddr)
+	if errClient != nil {
+		log.Error("ошибка при создании GRPC клиента", "error", errClient)
+	}
 
 	chUpdate := make(chan *models.Metrics, agentConfig.RateLimit)
 	for i := 0; i < agentConfig.RateLimit; i++ {
@@ -88,12 +93,18 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 			ticks += agentConfig.PollInterval
 			if ticks%agentConfig.ReportInterval == 0 {
 				c.mutex.RLock()
+				batchUpdate := make([]models.Metrics, len(c.lastUpdateMetrics)+1)
 				for _, metric := range c.lastUpdateMetrics {
 					chUpdate <- metric
+					batchUpdate = append(batchUpdate, *metric)
 				}
 				c.mutex.RUnlock()
-
-				chUpdate <- &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: getPointer(c.updateCounter.Swap(0))}
+				counterMetrics := &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: getPointer(c.updateCounter.Swap(0))}
+				batchUpdate = append(batchUpdate, *counterMetrics)
+				if errGRPCClient := grpcClient.SendMetrics(ctx, batchUpdate); errGRPCClient != nil {
+					log.Error("ошибка при отправке метрик по grpc", "error", errGRPCClient)
+				}
+				chUpdate <- counterMetrics
 			}
 			ticks %= agentConfig.ReportInterval
 		}

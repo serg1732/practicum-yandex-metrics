@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,8 +16,11 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/handler"
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
 	"github.com/serg1732/practicum-yandex-metrics/internal/logger"
+	metrics_proto "github.com/serg1732/practicum-yandex-metrics/internal/proto"
 	"github.com/serg1732/practicum-yandex-metrics/internal/repository"
 	"github.com/serg1732/practicum-yandex-metrics/internal/service"
+	"github.com/serg1732/practicum-yandex-metrics/internal/service/grpc_server"
+	"google.golang.org/grpc"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -49,6 +53,7 @@ func main() {
 	}
 
 	var mux *chi.Mux
+	var grpcServer *grpc.Server
 	if serverConfig.DSN != "" {
 		db, err := repository.BuildDataBase(ctx, log, serverConfig)
 		if err != nil {
@@ -64,12 +69,14 @@ func main() {
 		updaterHandler := handler.BuildUpdateHandler(db, &audit)
 		readHandlers := handler.BuildReadHandler(db)
 		mux = buildRouter(log, db, updaterHandler, readHandlers, serverConfig)
+		grpcServer = buildGRPCServer(ctx, log, serverConfig, db)
 
 	} else {
 		storage := repository.BuildMemStorage(ctx, log, serverConfig)
 		updaterHandler := handler.BuildUpdateHandler(storage, &audit)
 		readHandlers := handler.BuildReadHandler(storage)
 		mux = buildRouter(log, nil, updaterHandler, readHandlers, serverConfig)
+		grpcServer = buildGRPCServer(ctx, log, serverConfig, storage)
 	}
 
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
@@ -84,6 +91,26 @@ func main() {
 			return
 		}
 		log.Info("Завершение работы http сервера")
+	}()
+
+	go func() {
+		log.Info("Запуск GRPC сервера", "address", serverConfig.GRPCRunAddr)
+		if grpcServer == nil {
+			log.Error("Ошибка запуска GRPC сервера")
+			return
+		}
+		listener, err := net.Listen("tcp", serverConfig.GRPCRunAddr)
+		if err != nil {
+			log.Error("ошибка при запуске GRPC сервера", "error", err)
+			return
+		}
+		defer listener.Close()
+
+		errServer := grpcServer.Serve(listener)
+		if errServer != nil {
+			log.Error("ошибка от GRPC сервера", "error", errServer)
+			return
+		}
 	}()
 
 	<-ctx.Done()
@@ -139,6 +166,23 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 	router.Get("/ping", readHandlers.PingDatabase(log, db))
 	router.Get("/", readHandlers.AllMetricsHandler(log))
 	return router
+}
+
+func buildGRPCServer(ctx context.Context,
+	log *slog.Logger,
+	serverConfig *config.ServerConfig,
+	storage grpc_server.MetricsUpdater) *grpc.Server {
+	interceptor, err := grpc_server.TrustedSubnetInterceptor(ctx, log, serverConfig.TrustedSubnet)
+	if err != nil {
+		log.Error("ошибка при запуске GRPC сервера", "error", err)
+		return nil
+	}
+
+	server := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptor),
+	)
+	metrics_proto.RegisterMetricsServer(server, grpc_server.BuildGRPCMetricsService(log, storage))
+	return server
 }
 
 func printBuildInfo() {
