@@ -16,8 +16,11 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
+	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/netutils"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
+
+const xRealIPAddress = "X-Real-IP"
 
 // UpdaterClient представляет интерфейс, отражающий реализацию HTTP клиента по обновлению метрик на сервере.
 type UpdaterClient interface {
@@ -57,9 +60,16 @@ func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounte
 			return errors.New("ошибка отправки метрики gauge")
 		}
 	}
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
 
-	resp, err := r.httpClient.R().SetHeader("Content-Type", "text/plain").Post(
-		fmt.Sprintf("%s/update/%s/%s/%v", r.host, models.Counter, "PollCount", updateCounter))
+	resp, err := r.httpClient.R().
+		SetHeader(xRealIPAddress, agentIp).
+		SetHeader("Content-Type", "text/plain").
+		Post(fmt.Sprintf("%s/update/%s/%s/%v", r.host, models.Counter, "PollCount", updateCounter))
 	if err != nil || resp == nil || resp.StatusCode() != http.StatusOK {
 		log.Debug("Ошибка обновления метрик gauge",
 			slog.String("name", "PollCount"),
@@ -97,9 +107,16 @@ func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(
 		return errHash
 	}
 
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
+
 	urlModified := fmt.Sprintf("%s/updates/", r.host)
 	resp, err := r.httpClient.R().
 		SetHeader("Content-Encoding", "gzip").
+		SetHeader(xRealIPAddress, agentIp).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("HashSHA256", hash).
 		SetBody(gzipMetric).
@@ -170,8 +187,16 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(
 		log.Error("Ошибка при получении hash значения", "error", errHash)
 		return errHash
 	}
+
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
+
 	resp, err := r.httpClient.R().
 		SetHeader("Content-Encoding", "gzip").
+		SetHeader(xRealIPAddress, agentIp).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("HashSHA256", hash).
 		SetBody(gzipMetric).
@@ -195,7 +220,7 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 	}
 
 	if r.publicKey != nil {
-		log.Info("============ ENCRYPT ==================")
+		log.Debug("используется шифрование")
 		jsonMetric, err = cryptoutils.Encrypt(jsonMetric, r.publicKey)
 		if err != nil {
 			return errors.New("ошибка при шифровании сообщения: " + err.Error())
@@ -214,8 +239,15 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 		return errHash
 	}
 
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
+	if errGetAddress != nil {
+		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
+		return errGetAddress
+	}
+
 	resp, err := r.httpClient.R().
 		SetContext(ctx).
+		SetHeader(xRealIPAddress, agentIp).
 		SetHeader("Content-Encoding", "gzip").
 		SetHeader("Content-Type", "application/json").
 		SetHeader("HashSHA256", hash).

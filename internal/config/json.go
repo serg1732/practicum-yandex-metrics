@@ -63,6 +63,18 @@ func applyAgentJSONConfig(cfg *AgentConfig, path string) error {
 		}
 	}
 
+	if v, ok := raw["grpc_address"]; ok {
+		if err := json.Unmarshal(v, &cfg.GRPCRemoteAddr); err != nil {
+			return fmt.Errorf("ошибка при парсинге grpc_address: %w", err)
+		}
+	}
+
+	if v, ok := raw["tls_cert_path"]; ok {
+		if err := json.Unmarshal(v, &cfg.TLSCertPath); err != nil {
+			return fmt.Errorf("ошибка при парсинге tls_cert_path: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -110,6 +122,30 @@ func applyServerJSONConfig(cfg *ServerConfig, path string) error {
 	if v, ok := raw["crypto_key"]; ok {
 		if err := json.Unmarshal(v, &cfg.CryptoKey); err != nil {
 			return fmt.Errorf("ошибка при парсинге crypto_key: %w", err)
+		}
+	}
+
+	if v, ok := raw["trusted_subnet"]; ok {
+		if err := json.Unmarshal(v, &cfg.TrustedSubnet); err != nil {
+			return fmt.Errorf("ошибка при парсинге trusted_subnet: %w", err)
+		}
+	}
+
+	if v, ok := raw["grpc_address"]; ok {
+		if err := json.Unmarshal(v, &cfg.GRPCRunAddr); err != nil {
+			return fmt.Errorf("ошибка при парсинге grpc_address: %w", err)
+		}
+	}
+
+	if v, ok := raw["tls_cert_path"]; ok {
+		if err := json.Unmarshal(v, &cfg.TLSCertPath); err != nil {
+			return fmt.Errorf("ошибка при парсинге tls_cert_path: %w", err)
+		}
+	}
+
+	if v, ok := raw["tls_key_path"]; ok {
+		if err := json.Unmarshal(v, &cfg.TLSKeyPath); err != nil {
+			return fmt.Errorf("ошибка при парсинге tls_key_path: %w", err)
 		}
 	}
 
