@@ -17,6 +17,7 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/service/grpc_client"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
+	"google.golang.org/grpc/credentials"
 )
 
 // Collector представляет интерфейс, отражающий реализацию сборщика(агента) метрик.
@@ -68,9 +69,20 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 	} else {
 		agentClient = repository.BuildRestyUpdaterMetric("http://" + agentConfig.RemoteAddr)
 	}
-	grpcClient, errClient := grpc_client.BuildGRPCMetricsClient(log, agentConfig.GRPCRemoteAddr)
-	if errClient != nil {
-		log.Error("ошибка при создании GRPC клиента", "error", errClient)
+	var grpcClient *grpc_client.Client
+	if agentConfig.GRPCRemoteAddr != "" {
+		creds, errCreds := credentials.NewClientTLSFromFile(agentConfig.TLSCertPath, "")
+		if errCreds != nil {
+			log.Error("ошибка при инициализации TLS", "error", errCreds)
+			return errCreds
+		}
+		client, errClient := grpc_client.BuildGRPCMetricsClient(log, agentConfig.GRPCRemoteAddr, creds)
+		if errClient != nil {
+			log.Error("ошибка при создании GRPC клиента", "error", errClient)
+			return errClient
+		}
+		grpcClient = client
+		defer grpcClient.Close()
 	}
 
 	chUpdate := make(chan *models.Metrics, agentConfig.RateLimit)
@@ -93,7 +105,7 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 			ticks += agentConfig.PollInterval
 			if ticks%agentConfig.ReportInterval == 0 {
 				c.mutex.RLock()
-				batchUpdate := make([]models.Metrics, len(c.lastUpdateMetrics)+1)
+				batchUpdate := make([]models.Metrics, 0, len(c.lastUpdateMetrics)+1)
 				for _, metric := range c.lastUpdateMetrics {
 					chUpdate <- metric
 					batchUpdate = append(batchUpdate, *metric)
@@ -101,8 +113,10 @@ func (c *CollectorImpl) Run(ctx context.Context, log *slog.Logger, agentConfig c
 				c.mutex.RUnlock()
 				counterMetrics := &models.Metrics{ID: "PollCount", MType: models.Counter, Delta: getPointer(c.updateCounter.Swap(0))}
 				batchUpdate = append(batchUpdate, *counterMetrics)
-				if errGRPCClient := grpcClient.SendMetrics(ctx, batchUpdate); errGRPCClient != nil {
-					log.Error("ошибка при отправке метрик по grpc", "error", errGRPCClient)
+				if grpcClient != nil {
+					if errGRPCClient := grpcClient.SendMetrics(ctx, batchUpdate); errGRPCClient != nil {
+						log.Error("ошибка при отправке метрик по grpc", "error", errGRPCClient)
+					}
 				}
 				chUpdate <- counterMetrics
 			}

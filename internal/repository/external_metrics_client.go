@@ -12,12 +12,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
-	"strings"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/cryptoutils"
+	"github.com/serg1732/practicum-yandex-metrics/internal/helpers/netutils"
 	models "github.com/serg1732/practicum-yandex-metrics/internal/model"
 )
 
@@ -61,7 +60,7 @@ func (r RestyUpdaterClient) ExternalUpdateMetrics(log *slog.Logger, updateCounte
 			return errors.New("ошибка отправки метрики gauge")
 		}
 	}
-	agentIp, errGetAddress := getLocalIP(r.host)
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
 	if errGetAddress != nil {
 		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
 		return errGetAddress
@@ -108,7 +107,7 @@ func (r RestyUpdaterClient) ExternalBatchUpdateJSONMetrics(
 		return errHash
 	}
 
-	agentIp, errGetAddress := getLocalIP(r.host)
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
 	if errGetAddress != nil {
 		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
 		return errGetAddress
@@ -189,7 +188,7 @@ func (r RestyUpdaterClient) ExternalUpdateJSONMetrics(
 		return errHash
 	}
 
-	agentIp, errGetAddress := getLocalIP(r.host)
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
 	if errGetAddress != nil {
 		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
 		return errGetAddress
@@ -240,7 +239,7 @@ func (r RestyUpdaterClient) ExternalUpdateMetric(ctx context.Context, log *slog.
 		return errHash
 	}
 
-	agentIp, errGetAddress := getLocalIP(r.host)
+	agentIp, errGetAddress := netutils.GetAgentIPWithServerIP(r.host)
 	if errGetAddress != nil {
 		log.Error("ошибка при получении адреса IPv4 агента", "error", errGetAddress)
 		return errGetAddress
@@ -294,51 +293,4 @@ func getHash(data []byte, key string) (string, error) {
 	hash := h.Sum(nil)
 
 	return hex.EncodeToString(hash), nil
-}
-
-func getLocalIP(serverAddress string) (string, error) {
-	if strings.Contains(serverAddress, "localhost") ||
-		strings.Contains(serverAddress, "127.0.0.1") {
-		return "127.0.0.1", nil
-	}
-
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return "", err
-	}
-
-	for _, iface := range interfaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-
-		if iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-
-		addrs, errAddrs := iface.Addrs()
-		if errAddrs != nil {
-			continue
-		}
-
-		for _, addr := range addrs {
-			ipNet, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-
-			ip := ipNet.IP.To4()
-			if ip == nil {
-				continue
-			}
-
-			if ip.IsLoopback() || ip.IsLinkLocalUnicast() {
-				continue
-			}
-
-			return ip.String(), nil
-		}
-	}
-
-	return "", fmt.Errorf("адрес IPv4 не найден")
 }

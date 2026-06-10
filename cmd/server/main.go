@@ -21,6 +21,7 @@ import (
 	"github.com/serg1732/practicum-yandex-metrics/internal/service"
 	"github.com/serg1732/practicum-yandex-metrics/internal/service/grpc_server"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -29,6 +30,8 @@ import (
 var buildVersion = "N/A"
 var buildDate = "N/A"
 var buildCommit = "N/A"
+
+const maxSizeServerOptions = 2
 
 func main() {
 	printBuildInfo()
@@ -68,15 +71,32 @@ func main() {
 		}
 		updaterHandler := handler.BuildUpdateHandler(db, &audit)
 		readHandlers := handler.BuildReadHandler(db)
-		mux = buildRouter(log, db, updaterHandler, readHandlers, serverConfig)
-		grpcServer = buildGRPCServer(ctx, log, serverConfig, db)
+		mux, err = buildRouter(log, db, updaterHandler, readHandlers, serverConfig)
+		if err != nil {
+			log.Error("Ошибка при инициализации API", "error", err)
+			os.Exit(1)
+		}
+		grpcServer, err = buildGRPCServer(ctx, log, serverConfig, db)
+		if err != nil {
+			log.Error("Ошибка при инициализации GRPC сервера", "error", err)
+			os.Exit(1)
+		}
 
 	} else {
+		var err error
 		storage := repository.BuildMemStorage(ctx, log, serverConfig)
 		updaterHandler := handler.BuildUpdateHandler(storage, &audit)
 		readHandlers := handler.BuildReadHandler(storage)
-		mux = buildRouter(log, nil, updaterHandler, readHandlers, serverConfig)
-		grpcServer = buildGRPCServer(ctx, log, serverConfig, storage)
+		mux, err = buildRouter(log, nil, updaterHandler, readHandlers, serverConfig)
+		if err != nil {
+			log.Error("Ошибка при инициализации API", "error", err)
+			os.Exit(1)
+		}
+		grpcServer, err = buildGRPCServer(ctx, log, serverConfig, storage)
+		if err != nil {
+			log.Error("Ошибка при инициализации GRPC сервера", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	log.Info("Запуск http сервера", "address", serverConfig.RunAddr)
@@ -93,25 +113,23 @@ func main() {
 		log.Info("Завершение работы http сервера")
 	}()
 
-	go func() {
-		log.Info("Запуск GRPC сервера", "address", serverConfig.GRPCRunAddr)
-		if grpcServer == nil {
-			log.Error("Ошибка запуска GRPC сервера")
-			return
-		}
-		listener, err := net.Listen("tcp", serverConfig.GRPCRunAddr)
-		if err != nil {
-			log.Error("ошибка при запуске GRPC сервера", "error", err)
-			return
-		}
-		defer listener.Close()
+	if grpcServer != nil {
+		go func() {
+			log.Info("Запуск GRPC сервера", "address", serverConfig.GRPCRunAddr)
+			listener, err := net.Listen("tcp", serverConfig.GRPCRunAddr)
+			if err != nil {
+				log.Error("ошибка при запуске GRPC сервера", "error", err)
+				return
+			}
+			defer listener.Close()
 
-		errServer := grpcServer.Serve(listener)
-		if errServer != nil {
-			log.Error("ошибка от GRPC сервера", "error", errServer)
-			return
-		}
-	}()
+			errServer := grpcServer.Serve(listener)
+			if errServer != nil {
+				log.Error("ошибка от GRPC сервера", "error", errServer)
+				return
+			}
+		}()
+	}
 
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Duration(serverConfig.StoreInternal)*time.Second)
@@ -120,17 +138,20 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Error("Ошибка при завершении работы http сервера", "error", err)
 	}
+
+	if grpcServer != nil {
+		grpcServer.GracefulStop()
+	}
 }
 
 func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handler.UpdateHandlerImpl,
-	readHandlers handler.ReadMetricsHandlerImpl, config *config.ServerConfig) *chi.Mux {
+	readHandlers handler.ReadMetricsHandlerImpl, config *config.ServerConfig) (*chi.Mux, error) {
 	router := chi.NewRouter()
 	trustSubnetHandler, errTrustSubnet := handler.TrustedSubnetMiddleware(config.TrustedSubnet)
 	if errTrustSubnet != nil {
 		log.Error("ошибка при инициализации проверки IP адреса", "error", errTrustSubnet)
-		return nil
+		return nil, errTrustSubnet
 	}
-	router.Use(trustSubnetHandler)
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			wrapWriter := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
@@ -141,9 +162,9 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 	router.Use(handler.WithCheckHash(log, config.Key))
 	router.Use(handler.WithGzipCompress(log))
 	if config.CryptoKey != "" {
-		if privateKey, err := cryptoutils.LoadPrivateKey(config.CryptoKey); err != nil {
-			log.Error("ошибка при загрузке приватного ключа", "error", err.Error())
-			return nil
+		if privateKey, errCryptoKey := cryptoutils.LoadPrivateKey(config.CryptoKey); errCryptoKey != nil {
+			log.Error("ошибка при загрузке приватного ключа", "error", errCryptoKey.Error())
+			return nil, errCryptoKey
 		} else {
 			router.Use(handler.WithCrypto(log, privateKey))
 		}
@@ -151,10 +172,12 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 	router.Mount("/debug", middleware.Profiler())
 
 	router.Route("/updates", func(r chi.Router) {
+		r.Use(trustSubnetHandler)
 		r.Post("/", updateHandlers.UpdateValues(log))
 	})
 
 	router.Route("/update", func(r chi.Router) {
+		r.Use(trustSubnetHandler)
 		r.Post("/", updateHandlers.UpdateJSONHandler(log))
 		r.Post("/{metricType}/{metricName}/{metricValue}", updateHandlers.UpdatePathValuesHandler(log))
 	})
@@ -165,24 +188,35 @@ func buildRouter(log *slog.Logger, db *repository.DataBase, updateHandlers handl
 	})
 	router.Get("/ping", readHandlers.PingDatabase(log, db))
 	router.Get("/", readHandlers.AllMetricsHandler(log))
-	return router
+	return router, nil
 }
 
 func buildGRPCServer(ctx context.Context,
 	log *slog.Logger,
 	serverConfig *config.ServerConfig,
-	storage grpc_server.MetricsUpdater) *grpc.Server {
-	interceptor, err := grpc_server.TrustedSubnetInterceptor(ctx, log, serverConfig.TrustedSubnet)
-	if err != nil {
-		log.Error("ошибка при запуске GRPC сервера", "error", err)
-		return nil
-	}
+	storage grpc_server.MetricsUpdater) (*grpc.Server, error) {
+	var server *grpc.Server
+	serverOptions := make([]grpc.ServerOption, 0, maxSizeServerOptions)
 
-	server := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptor),
-	)
+	if serverConfig.TrustedSubnet != "" {
+		interceptor, err := grpc_server.TrustedSubnetInterceptor(ctx, log, serverConfig.TrustedSubnet)
+		if err != nil {
+			log.Error("ошибка при запуске GRPC сервера", "error", err)
+			return nil, err
+		}
+		serverOptions = append(serverOptions, grpc.ChainUnaryInterceptor(interceptor))
+	}
+	if serverConfig.TLSCertPath != "" && serverConfig.TLSKeyPath != "" {
+		creds, errCreds := credentials.NewServerTLSFromFile(serverConfig.TLSCertPath, serverConfig.TLSKeyPath)
+		if errCreds != nil {
+			log.Error("ошибка при инициализации TLS", "error", errCreds)
+			return nil, errCreds
+		}
+		serverOptions = append(serverOptions, grpc.Creds(creds))
+	}
+	server = grpc.NewServer(serverOptions...)
 	metrics_proto.RegisterMetricsServer(server, grpc_server.BuildGRPCMetricsService(log, storage))
-	return server
+	return server, nil
 }
 
 func printBuildInfo() {

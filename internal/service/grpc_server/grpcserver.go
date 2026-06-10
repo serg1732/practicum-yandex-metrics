@@ -31,13 +31,12 @@ func (s *GRPCMetricsService) UpdateMetrics(
 	ctx context.Context,
 	req *metrics_proto.UpdateMetricsRequest) (*metrics_proto.UpdateMetricsResponse, error) {
 	metrics := make([]*models.Metrics, 0, len(req.GetMetrics()))
-	s.log.Debug("Обновление метрик по GRPC", "metrics", req.GetMetrics())
 
 	for _, m := range req.GetMetrics() {
 		if m.GetId() == "" {
 			return nil, status.Error(codes.InvalidArgument, "идентификатор метрики отсутствует")
 		}
-
+		s.log.Debug("Обновление метрики по GRPC", "name", m.GetId(), "type", m.GetType(), "value", m.GetValue(), "delta", m.GetDelta())
 		switch m.GetType() {
 		case metrics_proto.Metric_GAUGE:
 			value := m.GetValue()
@@ -63,12 +62,12 @@ func (s *GRPCMetricsService) UpdateMetrics(
 	}
 
 	if len(metrics) == 0 {
-		return &metrics_proto.UpdateMetricsResponse{}, nil
+		return metrics_proto.UpdateMetricsResponse_builder{}.Build(), nil
 	}
 
 	if err := s.storage.Updates(ctx, s.log, metrics); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	return &metrics_proto.UpdateMetricsResponse{}, nil
+	return metrics_proto.UpdateMetricsResponse_builder{}.Build(), nil
 }

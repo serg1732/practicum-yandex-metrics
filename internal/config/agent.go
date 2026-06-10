@@ -18,6 +18,8 @@ type AgentConfig struct {
 	Key string `env:"KEY" json:"key"`
 	// CryptoKey ключ асимметричного шифрования
 	CryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
+	// TLSCertPath путь до сертификата сервера
+	TLSCertPath string `env:"TLS_AGENT_CERT_PATH" json:"tls_cert_path"`
 	// ConfigPath путь до JSON конфига
 	ConfigPath string `env:"CONFIG"`
 	// ReportInterval - интервал отправки метрик на сервер.
@@ -36,6 +38,7 @@ func GetAgentConfig() (*AgentConfig, error) {
 		ReportInterval: 10,
 		PollInterval:   2,
 		Key:            "",
+		TLSCertPath:    "",
 		RateLimit:      runtime.NumCPU(),
 		CryptoKey:      "",
 	}

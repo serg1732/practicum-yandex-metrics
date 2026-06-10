@@ -31,24 +31,24 @@ func TrustedSubnetInterceptor(ctx context.Context, log *slog.Logger, trustedSubn
 
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
-			log.Error("отсутствует metadata в grpc запросе")
+			log.Debug("отсутствует metadata в grpc запросе")
 			return nil, status.Error(codes.PermissionDenied, "отсутствует metadata")
 		}
 
 		values := md.Get(realIPMetadataKey)
 		if len(values) == 0 {
-			log.Error("отсутствует x-real-ip в grpc запросе")
+			log.Debug("отсутствует x-real-ip в grpc запросе")
 			return nil, status.Error(codes.PermissionDenied, "отсутствует x-real-ip")
 		}
 
 		ip := values[0]
 		if net.ParseIP(ip) == nil {
-			log.Error("некорретный x-real-ip в grpc запросе")
+			log.Debug("некорретный x-real-ip в grpc запросе")
 			return nil, status.Error(codes.PermissionDenied, "некорретный x-real-ip")
 		}
 
 		if !checkIPInSubnet(ip, subnet) {
-			log.Error("IP адрес не в списке разрешенных")
+			log.Debug("IP адрес не в списке разрешенных")
 			return nil, status.Error(codes.PermissionDenied, "IP адрес не в списке разрешенных")
 		}
 

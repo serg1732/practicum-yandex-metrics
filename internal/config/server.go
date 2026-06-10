@@ -25,6 +25,10 @@ type ServerConfig struct {
 	AuditURL string `env:"AUDIT_URL" json:"audit_url"`
 	// CryptoKey ключ асимметричного шифрования
 	CryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
+	// TLSCertPath путь до сертификата сервер
+	TLSCertPath string `env:"TLS_CERT_SERVER_PATH" json:"tls_cert_path"`
+	// TLSCertPath путь до ключа TLS сервера
+	TLSKeyPath string `env:"TLS_KEY_SERVER_PATH" json:"tls_key_path"`
 	// ConfigPath путь до JSON конфига
 	ConfigPath string `env:"CONFIG"`
 	// TrustedSubnet строковое представление бесклассовой адресации (CIDR)
@@ -49,6 +53,8 @@ func GetSeverConfig() (*ServerConfig, error) {
 		AuditURL:        "",
 		CryptoKey:       "",
 		TrustedSubnet:   "",
+		TLSCertPath:     "",
+		TLSKeyPath:      "",
 	}
 	path := configPathFromArgs(os.Args)
 	if path != "" {
