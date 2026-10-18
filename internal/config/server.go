@@ -11,6 +11,8 @@ import (
 type ServerConfig struct {
 	// RunAddr - адрес обработки запросов по работе с метриками в хранилище.
 	RunAddr string `env:"ADDRESS" json:"address"`
+	// GRPCRunAddr - адрес обработки запросов по работе с метриками в хранилище.
+	GRPCRunAddr string `env:"GRPC_ADDRESS" json:"grpc_address"`
 	// FileStoragePath - путь хранилища метрик в файле.
 	FileStoragePath string `env:"FILE_STORAGE_PATH" json:"store_file"`
 	// DSN - подключение к БД.
@@ -23,8 +25,14 @@ type ServerConfig struct {
 	AuditURL string `env:"AUDIT_URL" json:"audit_url"`
 	// CryptoKey ключ асимметричного шифрования
 	CryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
+	// TLSCertPath путь до сертификата сервер
+	TLSCertPath string `env:"TLS_CERT_SERVER_PATH" json:"tls_cert_path"`
+	// TLSCertPath путь до ключа TLS сервера
+	TLSKeyPath string `env:"TLS_KEY_SERVER_PATH" json:"tls_key_path"`
 	// ConfigPath путь до JSON конфига
 	ConfigPath string `env:"CONFIG"`
+	// TrustedSubnet строковое представление бесклассовой адресации (CIDR)
+	TrustedSubnet string `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
 	// StoreInternal - период сохранения метрик в файловом хранилище.
 	StoreInternal int `env:"STORE_INTERVAL" json:"store_internal"`
 	// Restore - флаг загрузки метрик из файлового хранилища.
@@ -35,6 +43,7 @@ type ServerConfig struct {
 func GetSeverConfig() (*ServerConfig, error) {
 	serverConfig := ServerConfig{
 		RunAddr:         "localhost:8080",
+		GRPCRunAddr:     "localhost:8081",
 		StoreInternal:   5,
 		FileStoragePath: "storage.json",
 		Restore:         false,
@@ -43,6 +52,9 @@ func GetSeverConfig() (*ServerConfig, error) {
 		AuditFile:       "",
 		AuditURL:        "",
 		CryptoKey:       "",
+		TrustedSubnet:   "",
+		TLSCertPath:     "",
+		TLSKeyPath:      "",
 	}
 	path := configPathFromArgs(os.Args)
 	if path != "" {
@@ -52,6 +64,7 @@ func GetSeverConfig() (*ServerConfig, error) {
 		}
 	}
 	flag.StringVar(&serverConfig.RunAddr, "a", serverConfig.RunAddr, "address and port to run server")
+	flag.StringVar(&serverConfig.GRPCRunAddr, "g", serverConfig.GRPCRunAddr, "address and port to run grpc server")
 	flag.IntVar(&serverConfig.StoreInternal, "i", serverConfig.StoreInternal, "time to save file storage server")
 	flag.StringVar(&serverConfig.FileStoragePath, "f", serverConfig.FileStoragePath, "address file storage server")
 	flag.BoolVar(&serverConfig.Restore, "r", serverConfig.Restore, "restore storage server")
@@ -62,6 +75,7 @@ func GetSeverConfig() (*ServerConfig, error) {
 	flag.StringVar(&serverConfig.CryptoKey, "crypto-key", serverConfig.CryptoKey, "crypto key private")
 	flag.StringVar(&serverConfig.ConfigPath, "c", serverConfig.ConfigPath, "config file path")
 	flag.StringVar(&serverConfig.ConfigPath, "config", serverConfig.ConfigPath, "config file path")
+	flag.StringVar(&serverConfig.TrustedSubnet, "t", serverConfig.TrustedSubnet, "trusted subnet")
 
 	flag.Parse()
 
